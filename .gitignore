@@ -1,0 +1,10 @@
+# Dependencies / build output
+node_modules/
+dist/
+src-tauri/target/
+
+# Makebot data: contains real credentials, never commit
+Makebot/
+
+# Dropbox metadata
+*com.dropbox.attrs
