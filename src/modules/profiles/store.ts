@@ -5,7 +5,7 @@ import { PROFILE_FIELDS, parseProfiles, serializeProfiles, type ProfileDoc, type
 import { readText, saveText, type FileEntry, type TextFile } from "../../lib/fs";
 import { countErrors, validateRecords, type ValidationErrors } from "../../lib/rules/engine";
 import { PROFILE_RULES } from "../../lib/rules/profiles";
-import { isProfile } from "./ops";
+import { deleteRows, importRows, isProfile, nameClashes, selectedValues } from "./ops";
 
 export interface DocEntry {
   file: FileEntry;
@@ -25,6 +25,8 @@ export type ConfirmOverwrite = (file: FileEntry) => Promise<boolean>;
 export type SaveResult =
   | { ok: true; verified: boolean }
   | { ok: false; reason: "cancelled" | "invalid" | "readonly" | "error"; error?: string };
+
+export type TransferResult = { ok: true; count: number } | { ok: false; error: string };
 
 export interface SaveAllResult {
   saved: DocEntry[];
@@ -113,6 +115,39 @@ export class ProfileStore {
     if (doc === e.doc) return;
     this.entries.set(path, makeEntry(e.file, e.loaded, doc));
     this.changed();
+  }
+
+  /** Drops a file from memory, e.g. after it was renamed or deleted. */
+  forget(path: string): void {
+    this.entries.delete(path);
+    this.loadErrors.delete(path);
+    this.changed();
+  }
+
+  /**
+   * Copies or moves the selected profile rows to the end of another group,
+   * keeping their names. Refused if any name already exists in the target
+   * or repeats within the selection. Both files are left with unsaved changes.
+   */
+  transfer(from: string, to: string, ids: readonly number[], mode: "copy" | "move"): TransferResult {
+    const src = this.entries.get(from);
+    const dst = this.entries.get(to);
+    if (!src || !dst || from === to) return { ok: false, error: "Pick another group." };
+    const readOnly = [src, dst].find((e) => !e.doc.headerOk);
+    if (readOnly) return { ok: false, error: `${readOnly.file.name} is read-only (wrong header).` };
+    const values = selectedValues(src.doc, ids);
+    if (values.length === 0) return { ok: false, error: "Select profile rows first." };
+    const clashes = nameClashes(dst.doc, values.map((v) => v[0]));
+    if (clashes.length) {
+      return { ok: false, error: `${dst.file.name} already has profiles named: ${clashes.join(", ")}. Rename them first.` };
+    }
+    this.entries.set(to, makeEntry(dst.file, dst.loaded, importRows(dst.doc, values)));
+    if (mode === "move") {
+      const moved = new Set(src.doc.rows.filter((r) => ids.includes(r.id) && isProfile(r)).map((r) => r.id));
+      this.entries.set(from, makeEntry(src.file, src.loaded, deleteRows(src.doc, [...moved])));
+    }
+    this.changed();
+    return { ok: true, count: values.length };
   }
 
   discard(path: string): void {

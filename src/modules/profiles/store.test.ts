@@ -195,3 +195,70 @@ describe("ProfileStore", () => {
     expect(store.dirtyEntries().map((e) => e.file.name)).toEqual(["b.csv", "c.csv"]);
   });
 });
+
+describe("ProfileStore.transfer", () => {
+  async function setup(files: Record<string, string>) {
+    const b = backend(files);
+    const store = new ProfileStore();
+    await store.scan(Object.keys(files).map(entry));
+    const p = (n: string) => entry(n).path;
+    const rowIds = (n: string) => store.get(p(n))!.doc.rows.map((r) => r.id);
+    return { ...b, store, p, rowIds };
+  }
+
+  it("copies selected rows to the end of the target, keeping names and bytes", async () => {
+    const { store, p, rowIds } = await setup({ "a.csv": GOOD, "b.csv": `${H}\r\n${row("9")}\r\n` });
+    const r = store.transfer(p("a.csv"), p("b.csv"), [rowIds("a.csv")[1]], "copy");
+    expect(r).toEqual({ ok: true, count: 1 });
+    expect(store.get(p("b.csv"))!.serialized).toBe(`${H}\r\n${row("9")}\r\n${row("2")}\r\n`);
+    expect(store.get(p("a.csv"))!.dirty).toBe(false);
+    expect(store.dirtyEntries().map((e) => e.file.name)).toEqual(["b.csv"]);
+  });
+
+  it("move also removes the rows from the source", async () => {
+    const { store, p, rowIds } = await setup({ "a.csv": GOOD, "b.csv": `${H}\r\n` });
+    store.transfer(p("a.csv"), p("b.csv"), rowIds("a.csv"), "move");
+    expect(store.get(p("a.csv"))!.serialized).toBe(`${H}\r\n`);
+    expect(store.get(p("b.csv"))!.serialized).toBe(GOOD);
+    expect(store.dirtyEntries().map((e) => e.file.name)).toEqual(["a.csv", "b.csv"]);
+  });
+
+  it("into a 0-byte group adds the header", async () => {
+    const { store, p, rowIds } = await setup({ "a.csv": GOOD, "e.csv": "" });
+    store.transfer(p("a.csv"), p("e.csv"), [rowIds("a.csv")[0]], "copy");
+    expect(store.get(p("e.csv"))!.serialized).toBe(`${H}\r\n${row("1")}\r\n`);
+  });
+
+  it("refuses when a name already exists in the target, changing nothing", async () => {
+    const { store, p, rowIds } = await setup({ "a.csv": GOOD, "b.csv": `${H}\r\n${row("2")}\r\n` });
+    const r = store.transfer(p("a.csv"), p("b.csv"), rowIds("a.csv"), "move");
+    expect(r).toEqual({ ok: false, error: "b.csv already has profiles named: 2. Rename them first." });
+    expect(store.dirtyEntries()).toEqual([]);
+  });
+
+  it("skips raw rows and refuses when nothing is selected", async () => {
+    const { store, p, rowIds } = await setup({ "a.csv": `${H}\r\nfoo\r\n${row("1")}\r\n`, "b.csv": `${H}\r\n` });
+    expect(store.transfer(p("a.csv"), p("b.csv"), [rowIds("a.csv")[0]], "move")).toEqual({
+      ok: false,
+      error: "Select profile rows first.",
+    });
+    store.transfer(p("a.csv"), p("b.csv"), rowIds("a.csv"), "move");
+    expect(store.get(p("a.csv"))!.serialized).toBe(`${H}\r\nfoo\r\n`);
+    expect(store.get(p("b.csv"))!.serialized).toBe(`${H}\r\n${row("1")}\r\n`);
+  });
+
+  it("refuses read-only groups and the same group", async () => {
+    const { store, p, rowIds } = await setup({ "a.csv": GOOD, "x.csv": "a,b\r\n" });
+    expect(store.transfer(p("a.csv"), p("x.csv"), rowIds("a.csv"), "copy")).toEqual({
+      ok: false,
+      error: "x.csv is read-only (wrong header).",
+    });
+    expect(store.transfer(p("a.csv"), p("a.csv"), rowIds("a.csv"), "copy")).toEqual({ ok: false, error: "Pick another group." });
+  });
+
+  it("forget drops a file", async () => {
+    const { store, p } = await setup({ "a.csv": GOOD });
+    store.forget(p("a.csv"));
+    expect(store.get(p("a.csv"))).toBeUndefined();
+  });
+});

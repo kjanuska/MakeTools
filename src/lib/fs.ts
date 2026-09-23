@@ -51,3 +51,18 @@ export function listBackups(path: string): Promise<BackupEntry[]> {
 export function restoreBackup(path: string, id: string): Promise<void> {
   return invoke("restore_backup", { path, id });
 }
+
+/** Creates a new file with exactly `text`. Fails if the file already exists. */
+export function createFile(path: string, text: string): Promise<void> {
+  return invoke("create_file", { path, text });
+}
+
+/** Renames a file after backing it up. Fails if `to` is another existing file. */
+export function renameFile(from: string, to: string): Promise<void> {
+  return invoke("rename_file", { from, to });
+}
+
+/** Deletes a file after backing it up. */
+export function deleteFile(path: string): Promise<void> {
+  return invoke("delete_file", { path });
+}

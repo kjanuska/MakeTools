@@ -112,3 +112,21 @@ export function parseImport(text: string): ImportResult {
 export function importRows(doc: ProfileDoc, rows: readonly (readonly string[])[]): ProfileDoc {
   return appendRows(doc, rows, true);
 }
+
+/** Values of the selected profile rows, in file order. Raw rows are skipped. */
+export function selectedValues(doc: ProfileDoc, ids: readonly number[]): string[][] {
+  const set = new Set(ids);
+  return doc.rows.filter((r): r is ProfileRow => isProfile(r) && set.has(r.id)).map((r) => [...r.values]);
+}
+
+/** Names that already exist in `target`, or repeat within `names`, in first-seen order. */
+export function nameClashes(target: ProfileDoc, names: readonly string[]): string[] {
+  const existing = new Set(target.rows.filter(isProfile).map((r) => r.values[NAME]));
+  const seen = new Set<string>();
+  const clashes: string[] = [];
+  for (const n of names) {
+    if ((existing.has(n) || seen.has(n)) && !clashes.includes(n)) clashes.push(n);
+    seen.add(n);
+  }
+  return clashes;
+}
