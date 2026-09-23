@@ -115,4 +115,21 @@ Details settled while building. Each is small, and the user can change any of th
 - **Restoring a backup** is disabled while there are unsaved changes.
 - The close prompt needs the `core:window:allow-destroy` and `dialog:allow-message` capabilities.
 - Changed after the first 2a check (2026-09-23): shift-select, the always-open bulk edit panel, git-status-style unsaved changes with no prompt when switching files, red highlighting for invalid files, and the Ron's Data Edit-style grid.
+## Build notes (2b, 2026-09-23)
+- **Groups overview:** shown when Profiles is open and no group is selected. Clicking **Profiles** again or **← All groups** in a group returns to it.
+  - It lists each group with its profile count and status (OK, N errors, unsaved changes, wrong header, couldn't read), with problem groups in red.
+  - The total above the table counts unsaved edits.
+- **Find a profile:** case-insensitive "contains" search on `profileName` across all groups, showing up to 200 matches. Opening a match opens its group with that row selected.
+- **Group files:**
+  - **Create** writes the header + CRLF and opens the new group.
+  - **Copy** is byte-exact from the saved file, with a suggested name of "<name> copy".
+  - **Rename** warns that tasks referring to the old name aren't updated.
+  - **Delete** says how many profiles the group has.
+  - Rename, copy and delete are disabled while the group has unsaved changes.
+- **Group names** are file names without `.csv`. They can't be empty, can't start or end with a space and can't end with a dot. They can't be a Windows reserved name. They can't contain `, < > : " /  | ? *` or control characters (a comma or quote would break task CSVs). They must be unique, ignoring case. A rename can change only the case.
+- **Safety:** `create_file` never overwrites an existing file, and `rename_file` refuses to replace another file. Delete and rename back up the file first under its old path. To get a deleted group back, create a group with the same name and restore it from Backups.
+- **Move / copy to group** (editor panel): the selected profiles are added to the end of another editable group with their names kept. Any name clash blocks the whole action. Both groups are left with unsaved changes until saved.
+- Reloading a file that hasn't changed on disk keeps its rows as they are, so selections survive list refreshes.
+- Code: overview in `src/modules/profiles/GroupsOverview.tsx`, file operations in `groups.ts` and name rules in `groupNames.ts`.
+
 - Code: format in `src/lib/formats/profiles.ts`, rules engine and config in `src/lib/rules/`, edit operations in `src/modules/profiles/ops.ts`, open files and unsaved edits in `src/modules/profiles/store.ts`, UI in `src/modules/profiles/ProfilesEditor.tsx`, and the sidebar list in `src/shell/ChangesPanel.tsx`.

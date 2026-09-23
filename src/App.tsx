@@ -6,6 +6,7 @@ import { MODULES, type ModuleId } from "./lib/modules";
 import { joinPath } from "./lib/paths";
 import { getMakebotPath, setMakebotPath } from "./lib/settings";
 import { guardWindowClose } from "./lib/window";
+import { GroupsOverview } from "./modules/profiles/GroupsOverview";
 import { ProfilesEditor } from "./modules/profiles/ProfilesEditor";
 import { confirmOverwrite } from "./modules/profiles/prompts";
 import { ProfileStore, useStoreVersion } from "./modules/profiles/store";
@@ -25,6 +26,10 @@ export default function App() {
   const [store] = useState(() => new ProfileStore());
   const [savingAll, setSavingAll] = useState(false);
   const [changesMessage, setChangesMessage] = useState<string | null>(null);
+  // The profile folder's files (for the overview and move/copy targets).
+  const [profileFiles, setProfileFiles] = useState<FileEntry[] | null>(null);
+  // profileName to jump to when a file is opened from the overview search.
+  const [highlight, setHighlight] = useState<string | undefined>(undefined);
   useStoreVersion(store);
 
   useEffect(() => {
@@ -94,17 +99,22 @@ export default function App() {
     }
   }
 
+  /** Clicking the current module again goes back to its overview. */
   function selectModule(id: ModuleId) {
-    if (id === moduleId) return;
     setModuleId(id);
     setSelected(null);
+  }
+
+  function openFile(file: FileEntry, highlightName?: string) {
+    setHighlight(highlightName);
+    setSelected(file);
   }
 
   function openChanged(path: string) {
     const e = store.get(path);
     if (!e) return;
     setModuleId("profiles");
-    setSelected(e.file);
+    openFile(e.file);
   }
 
   if (root === undefined) return null;
@@ -164,9 +174,16 @@ export default function App() {
         dir={joinPath(root, mod.folder)}
         extension={mod.extension}
         selectedPath={selected?.path ?? null}
-        onSelect={setSelected}
+        onSelect={(f) => openFile(f)}
         version={listVersion}
-        onLoaded={isProfiles ? (files) => void store.scan(files) : undefined}
+        onLoaded={
+          isProfiles
+            ? (files) => {
+                setProfileFiles(files);
+                void store.scan(files);
+              }
+            : undefined
+        }
         marker={
           isProfiles
             ? (f) => {
@@ -184,12 +201,23 @@ export default function App() {
             file={selected}
             store={store}
             onSaved={() => setListVersion((v) => v + 1)}
+            groups={profileFiles ?? []}
+            onBack={() => setSelected(null)}
+            highlightName={highlight}
           />
         ) : selected ? (
           <FilePanel
             key={selected.path}
             file={selected}
             onChanged={() => setListVersion((v) => v + 1)}
+          />
+        ) : isProfiles ? (
+          <GroupsOverview
+            files={profileFiles}
+            dir={joinPath(root, mod.folder)}
+            store={store}
+            onOpen={openFile}
+            onFilesChanged={() => setListVersion((v) => v + 1)}
           />
         ) : (
           <p className="muted">Select a file.</p>

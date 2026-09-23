@@ -458,3 +458,55 @@ textarea {
   white-space: pre-wrap;
   font-size: 12px;
 }
+
+/* Profile groups overview */
+
+.groups-overview h2 {
+  margin: 0 0 4px;
+}
+
+.overview-total {
+  margin: 0 0 12px;
+  font-size: 15px;
+}
+
+.overview-table {
+  border-collapse: collapse;
+  margin-bottom: 16px;
+}
+
+.overview-table th,
+.overview-table td {
+  text-align: left;
+  padding: 4px 16px 4px 6px;
+  border-bottom: 1px solid var(--border);
+}
+
+.overview-table tr.invalid td {
+  background: color-mix(in srgb, var(--error) 10%, transparent);
+}
+
+.overview-table .num {
+  text-align: right;
+}
+
+.row-actions {
+  display: flex;
+  gap: 4px;
+}
+
+button.link {
+  border: none;
+  background: none;
+  padding: 0;
+  color: var(--accent);
+  text-decoration: underline;
+}
+
+.find input {
+  min-width: 260px;
+}
+
+.editor-head button {
+  align-self: center;
+}

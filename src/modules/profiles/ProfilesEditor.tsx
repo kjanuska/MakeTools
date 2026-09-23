@@ -26,9 +26,14 @@ interface Props {
   store: ProfileStore;
   /** Called after the file on disk changed (save or restore). */
   onSaved: () => void;
+  /** Every profile group, for moving/copying rows. */
+  groups: FileEntry[];
+  onBack: () => void;
+  /** Select and scroll to the row with this profileName once loaded. */
+  highlightName?: string;
 }
 
-type Panel = "template" | "import" | null;
+type Panel = "template" | "import" | "transfer" | null;
 
 type RowErrors = Partial<Record<ProfileField, string>>;
 
@@ -42,7 +47,7 @@ interface Selection {
 
 const EMPTY_SELECTION: Selection = { ids: new Set(), anchor: null };
 
-export function ProfilesEditor({ file, store, onSaved }: Props) {
+export function ProfilesEditor({ file, store, onSaved, groups, onBack, highlightName }: Props) {
   useStoreVersion(store);
   const [selection, setSelection] = useState<Selection>(EMPTY_SELECTION);
   const [panel, setPanel] = useState<Panel>(null);
@@ -51,6 +56,7 @@ export function ProfilesEditor({ file, store, onSaved }: Props) {
   const [saving, setSaving] = useState(false);
   const [backupsVersion, setBackupsVersion] = useState(0);
   const gridRef = useRef<HTMLTableElement>(null);
+  const highlighted = useRef(false);
 
   const entry = store.get(file.path);
   const loadError = store.loadError(file.path);
@@ -72,6 +78,18 @@ export function ProfilesEditor({ file, store, onSaved }: Props) {
       };
     });
   }, [doc]);
+
+  // Jump to the profile picked in the overview search, once.
+  useEffect(() => {
+    if (!doc || !highlightName || highlighted.current) return;
+    highlighted.current = true;
+    const i = doc.rows.findIndex((r) => isProfile(r) && r.values[0] === highlightName);
+    if (i < 0) return;
+    setSelection({ ids: new Set([doc.rows[i].id]), anchor: doc.rows[i].id });
+    const input = gridRef.current?.querySelector<HTMLElement>(`[data-row="${i}"][data-col="0"]`);
+    input?.scrollIntoView?.({ block: "center" });
+    input?.focus();
+  }, [doc, highlightName]);
 
   const edit = useCallback(
     (f: Parameters<ProfileStore["update"]>[1]) => {
@@ -169,6 +187,7 @@ export function ProfilesEditor({ file, store, onSaved }: Props) {
   return (
     <div className="profiles-editor">
       <div className="editor-head">
+        <button onClick={onBack}>← All groups</button>
         <h2>{file.name}</h2>
         <span className="muted">
           {profiles.length} {profiles.length === 1 ? "profile" : "profiles"}
@@ -213,6 +232,7 @@ export function ProfilesEditor({ file, store, onSaved }: Props) {
               [
                 ["template", "From template"],
                 ["import", "Paste rows"],
+                ["transfer", "Move / copy to group"],
               ] as const
             ).map(([id, label]) => (
               <button key={id} aria-pressed={panel === id} onClick={() => setPanel(panel === id ? null : id)}>
@@ -254,6 +274,20 @@ export function ProfilesEditor({ file, store, onSaved }: Props) {
               onImport={(rows) => {
                 edit((d) => importRows(d, rows));
                 setStatus(`Added ${rows.length} pasted ${rows.length === 1 ? "row" : "rows"}.`);
+              }}
+            />
+          )}
+          {panel === "transfer" && (
+            <TransferPanel
+              count={selectedProfiles.length}
+              groups={groups.filter((g) => g.path !== file.path && store.get(g.path)?.doc.headerOk)}
+              onTransfer={(target, mode) => {
+                const r = store.transfer(file.path, target.path, selectedIds, mode);
+                if (!r.ok) return r.error;
+                setStatus(
+                  `${mode === "copy" ? "Copied" : "Moved"} ${r.count} ${r.count === 1 ? "profile" : "profiles"} to ${target.name} (not saved yet).`,
+                );
+                return null;
               }}
             />
           )}
@@ -549,6 +583,46 @@ function ImportPanel({ onImport }: { onImport: (rows: string[][]) => void }) {
           </ul>
         )}
       </div>
+    </section>
+  );
+}
+
+function TransferPanel({
+  count,
+  groups,
+  onTransfer,
+}: {
+  count: number;
+  groups: FileEntry[];
+  /** Returns an error message, or null on success. */
+  onTransfer: (target: FileEntry, mode: "copy" | "move") => string | null;
+}) {
+  const [targetPath, setTargetPath] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const target = groups.find((g) => g.path === targetPath);
+  const go = (mode: "copy" | "move") => target && setError(onTransfer(target, mode));
+  const rows = `${count} selected ${count === 1 ? "profile" : "profiles"}`;
+  return (
+    <section className="action-panel" aria-label="Move or copy to group">
+      <label>
+        To group{" "}
+        <select value={targetPath} onChange={(e) => setTargetPath(e.target.value)}>
+          <option value="">Choose…</option>
+          {groups.map((g) => (
+            <option key={g.path} value={g.path}>
+              {g.name}
+            </option>
+          ))}
+        </select>
+      </label>
+      <button disabled={!target || count === 0} onClick={() => go("copy")}>
+        Copy {rows}
+      </button>
+      <button disabled={!target || count === 0} onClick={() => go("move")}>
+        Move {rows}
+      </button>
+      <span className="muted">Names are kept. Both groups need saving afterwards.</span>
+      {error && <span className="error">{error}</span>}
     </section>
   );
 }

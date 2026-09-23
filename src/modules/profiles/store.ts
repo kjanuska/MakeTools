@@ -94,6 +94,8 @@ export class ProfileStore {
       const loaded = await readText(file.path);
       const current = this.entries.get(file.path);
       if (current?.dirty && !force) return; // edited while reading
+      // Unchanged on disk: keep the parsed rows (and their ids, so selections survive).
+      if (current && !force && current.loaded.text === loaded.text && !this.loadErrors.has(file.path)) return;
       this.entries.set(file.path, makeEntry(file, loaded, parseProfiles(loaded.text)));
       this.loadErrors.delete(file.path);
     } catch (e) {

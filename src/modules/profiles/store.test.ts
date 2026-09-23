@@ -262,3 +262,26 @@ describe("ProfileStore.transfer", () => {
     expect(store.get(p("a.csv"))).toBeUndefined();
   });
 });
+
+describe("ProfileStore reloads", () => {
+  it("keeps the same rows when the file on disk is unchanged", async () => {
+    backend({ "g.csv": GOOD });
+    const store = new ProfileStore();
+    const f = entry("g.csv");
+    await store.load(f);
+    const before = store.get(f.path);
+    await store.load(f);
+    expect(store.get(f.path)).toBe(before);
+  });
+
+  it("force re-parses even when unchanged", async () => {
+    backend({ "g.csv": GOOD });
+    const store = new ProfileStore();
+    const f = entry("g.csv");
+    await store.load(f);
+    const before = store.get(f.path)!;
+    await store.load(f, true);
+    expect(store.get(f.path)).not.toBe(before);
+    expect(store.get(f.path)!.serialized).toBe(before.serialized);
+  });
+});
