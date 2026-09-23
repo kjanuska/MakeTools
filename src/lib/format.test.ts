@@ -29,7 +29,7 @@ describe("utf8Length", () => {
     expect(utf8Length("")).toBe(0);
     expect(utf8Length("abc")).toBe(3);
     expect(utf8Length("ä")).toBe(2);
-    expect(utf8Length("﻿")).toBe(3);
+    expect(utf8Length("\uFEFF")).toBe(3);
     expect(utf8Length("a\r\n")).toBe(3);
   });
 });
