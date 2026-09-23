@@ -37,8 +37,8 @@ export default function App() {
   const [changesMessage, setChangesMessage] = useState<string | null>(null);
   // The profile folder's files (for the overview and move/copy targets).
   const [profileFiles, setProfileFiles] = useState<FileEntry[] | null>(null);
-  // profileName to jump to when a file is opened from the overview search.
-  const [highlight, setHighlight] = useState<string | undefined>(undefined);
+  // Row to jump to when a file is opened from the overview search.
+  const [highlight, setHighlight] = useState<number | undefined>(undefined);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [bindings, setBindings] = useState<Bindings>(DEFAULT_BINDINGS);
   const bindingsRef = useRef(bindings);
@@ -150,9 +150,9 @@ export default function App() {
     setSelected(null);
   }
 
-  function openFile(file: FileEntry, highlightName?: string) {
+  function openFile(file: FileEntry, highlightId?: number) {
     setSettingsOpen(false);
-    setHighlight(highlightName);
+    setHighlight(highlightId);
     setSelected(file);
   }
 
@@ -259,7 +259,7 @@ export default function App() {
             onSaved={() => setListVersion((v) => v + 1)}
             groups={profileFiles ?? []}
             onBack={() => setSelected(null)}
-            highlightName={highlight}
+            highlightId={highlight}
           />
         ) : selected ? (
           <FilePanel
