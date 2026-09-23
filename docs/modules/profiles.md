@@ -144,6 +144,7 @@ Details settled while building. Each is small, and the user can change any of th
   - Panels: Bulk edit `Ctrl+B`, From template `Ctrl+T`, Paste rows `Ctrl+Shift+V`, Move/copy `Ctrl+M`, Backups `Ctrl+H`.
   - Navigation: Back to all groups `Alt+←`, Find a profile `Ctrl+F`, Refresh file list `F5`, Settings `Ctrl+,`.
   - In a text box outside the grid (paste box, search, bulk value), only the save, panel and navigation shortcuts work, so Ctrl+A and similar keys still act on the text.
+  - While a grid cell is being edited, Ctrl+A selects the cell's text, not all rows (user request, 2026-09-23). It selects all rows when focus is elsewhere, for example after clicking a row number or on a dropdown cell. Other shortcuts still work in cells.
   - A shortcut must use Ctrl or Alt, except F1–F12 and Escape.
   - Giving one action another action's keys removes them from the other action, with a note.
   - Page-reload keys (`F5`, `Ctrl+R`, `Ctrl+Shift+R`) are always blocked, so unsaved changes can't be lost by accident.

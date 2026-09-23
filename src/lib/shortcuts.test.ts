@@ -159,15 +159,32 @@ describe("registry and key handling", () => {
     expect(save).toHaveBeenCalled();
   });
 
-  it("in a grid cell every action runs", () => {
+  it("in a grid cell, Ctrl+A is left to the cell; other actions run", () => {
+    const r = new ShortcutRegistry();
+    const selectAll = vi.fn();
+    const addRow = vi.fn();
+    r.register(() => ({ selectAll, addRow }));
+    const table = document.createElement("table");
+    table.className = "grid";
+    const input = document.createElement("input");
+    table.appendChild(input);
+    const ctrlA = event(key("a", { ctrl: true }), input);
+    handleShortcutKey(ctrlA, DEFAULT_BINDINGS, r);
+    expect(selectAll).not.toHaveBeenCalled();
+    expect(ctrlA.defaultPrevented).toBe(false);
+    handleShortcutKey(event(key("n", { ctrl: true }), input), DEFAULT_BINDINGS, r);
+    expect(addRow).toHaveBeenCalled();
+  });
+
+  it("a grid dropdown isn't a text box, so Ctrl+A selects rows there", () => {
     const r = new ShortcutRegistry();
     const selectAll = vi.fn();
     r.register(() => ({ selectAll }));
     const table = document.createElement("table");
     table.className = "grid";
-    const input = document.createElement("input");
-    table.appendChild(input);
-    handleShortcutKey(event(key("a", { ctrl: true }), input), DEFAULT_BINDINGS, r);
+    const select = document.createElement("select");
+    table.appendChild(select);
+    handleShortcutKey(event(key("a", { ctrl: true }), select), DEFAULT_BINDINGS, r);
     expect(selectAll).toHaveBeenCalled();
   });
 });

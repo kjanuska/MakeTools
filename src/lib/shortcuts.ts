@@ -7,7 +7,8 @@ export const ACTIONS = [
   { id: "save", label: "Save file", keys: "Ctrl+S", whileTyping: true },
   { id: "saveAll", label: "Save all changed files", keys: "Ctrl+Shift+S", whileTyping: true },
   { id: "discard", label: "Discard changes to file", keys: null, whileTyping: false },
-  { id: "selectAll", label: "Select all rows", keys: "Ctrl+A", whileTyping: false },
+  // In a cell, Ctrl+A selects the cell's text instead.
+  { id: "selectAll", label: "Select all rows", keys: "Ctrl+A", whileTyping: false, inCells: false },
   { id: "clearSelection", label: "Clear row selection", keys: "Escape", whileTyping: false },
   { id: "addRow", label: "Add row", keys: "Ctrl+N", whileTyping: false },
   { id: "duplicate", label: "Duplicate selected rows", keys: "Ctrl+D", whileTyping: false },
@@ -23,7 +24,15 @@ export const ACTIONS = [
   { id: "find", label: "Find a profile", keys: "Ctrl+F", whileTyping: true },
   { id: "refresh", label: "Refresh file list", keys: "F5", whileTyping: true },
   { id: "settings", label: "Open settings", keys: "Ctrl+,", whileTyping: true },
-] as const satisfies readonly { id: string; label: string; keys: string | null; whileTyping: boolean }[];
+] as const satisfies readonly {
+  id: string;
+  label: string;
+  keys: string | null;
+  /** Runs while typing in a text box outside the grid (paste box, search…). */
+  whileTyping: boolean;
+  /** Set to false to leave the key to a grid cell being edited. Default true. */
+  inCells?: boolean;
+}[];
 
 export type ActionId = (typeof ACTIONS)[number]["id"];
 
@@ -130,11 +139,12 @@ export function useShortcutsRef(ref: { current: Handlers }, registry: ShortcutRe
   useEffect(() => registry.register(() => ref.current), [registry, ref]);
 }
 
-/** True for text fields outside the spreadsheet grid, where typing shouldn't trigger most shortcuts. */
-export function isTypingOutsideGrid(target: EventTarget | null): boolean {
-  if (!(target instanceof HTMLElement)) return false;
+/** Where the user is typing: a grid cell, another text box, or neither. */
+export function typingIn(target: EventTarget | null): "cell" | "text" | null {
+  if (!(target instanceof HTMLElement)) return null;
   const typing = target.tagName === "TEXTAREA" || (target.tagName === "INPUT" && (target as HTMLInputElement).type !== "checkbox");
-  return typing && !target.closest(".grid");
+  if (!typing) return null;
+  return target.closest(".grid") ? "cell" : "text";
 }
 
 /** Browser keys that would reload the page and lose unsaved changes. */
@@ -152,6 +162,8 @@ export function handleShortcutKey(e: KeyboardEvent, bindings: Bindings, registry
   const id = actionForCombo(bindings, combo);
   if (!id) return;
   const action = ACTIONS.find((a) => a.id === id)!;
-  if (!action.whileTyping && isTypingOutsideGrid(e.target)) return;
+  const where = typingIn(e.target);
+  if (where === "text" && !action.whileTyping) return;
+  if (where === "cell" && "inCells" in action && !action.inCells) return;
   if (registry.run(id)) e.preventDefault();
 }

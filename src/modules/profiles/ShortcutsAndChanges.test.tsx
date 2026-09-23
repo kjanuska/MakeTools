@@ -174,15 +174,22 @@ describe("row header clicks", () => {
 });
 
 describe("keyboard shortcuts in a group", () => {
-  it("Ctrl+A selects all rows, from the page or a grid cell", async () => {
+  it("Ctrl+A selects all rows when not editing a cell", async () => {
     backend({ "g.csv": GOOD });
     await open();
     press("a", { ctrlKey: true });
     expect(selectedRows()).toEqual(["1", "2", "3"]);
     press("Escape");
     expect(selectedRows()).toEqual([]);
-    press("a", { ctrlKey: true }, cell(2, "city"));
+    press("a", { ctrlKey: true }, screen.getByRole("rowheader", { name: "Row 2" }));
     expect(selectedRows()).toEqual(["1", "2", "3"]);
+  });
+
+  it("Ctrl+A in a cell being edited is left to the cell (selects its text)", async () => {
+    backend({ "g.csv": GOOD });
+    await open();
+    expect(press("a", { ctrlKey: true }, cell(2, "city"))).toBe(true); // not prevented
+    expect(selectedRows()).toEqual([]);
   });
 
   it("Ctrl+A in a text box outside the grid is left to the text box", async () => {
