@@ -24,7 +24,7 @@ const R3 = row("3", "Peoria");
 const TEXT = `${H}\r\n${R1}\r\n${R2}\r\n${R3}\r\n`;
 
 const ids = (doc: ProfileDoc) => doc.rows.map((r) => r.id);
-const names = (doc: ProfileDoc) => doc.rows.map((r) => (r.kind === "profile" ? r.values[0] : `raw:${r.text}`));
+const names = (doc: ProfileDoc) => doc.rows.map((r) => (r.kind === "record" ? r.values[0] : `raw:${r.text}`));
 const values = (doc: ProfileDoc, i: number) => (doc.rows[i] as ProfileRow).values;
 
 describe("setCell / bulkSet", () => {

@@ -305,7 +305,7 @@ describe("ProfileStore change tracking", () => {
 
   it("new rows have no original values", async () => {
     const { store, f, e } = await loaded(GOOD);
-    store.update(f.path, (d) => ({ ...d, rows: [...d.rows, { kind: "profile", id: -5, values: row("9").split(","), eol: "" }] }));
+    store.update(f.path, (d) => ({ ...d, rows: [...d.rows, { kind: "record", id: -5, values: row("9").split(","), eol: "" }] }));
     expect(e().original.has(-5)).toBe(false);
   });
 

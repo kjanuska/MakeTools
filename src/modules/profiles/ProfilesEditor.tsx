@@ -432,7 +432,7 @@ const sameErrors = (a: RowErrors | undefined, b: RowErrors | undefined) =>
 const GridRow = memo(
   function GridRow({ row, index, errors, original, selected, readOnly, onCell, onRowHead, onCellKey }: GridRowProps) {
     const number = index + 1;
-    const isNew = row.kind === "profile" && !original;
+    const isNew = row.kind === "record" && !original;
     const classes = [selected && "selected", isNew && "new-row"].filter(Boolean).join(" ");
     return (
       <tr className={classes || undefined} aria-selected={selected}>

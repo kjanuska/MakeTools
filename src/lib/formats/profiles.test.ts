@@ -13,7 +13,7 @@ const ROW1 = "1,Jane,Doe,jane1@example.com,101 Main St,,Springfield,IL,62701,US,
 const ROW2 = "2,John,Roe,john2@example.com,102 Main St,Apt 2,Springfield,IL,62701,US,2175550101,371449635398431,12,30,1234";
 
 const roundTrip = (text: string) => serializeProfiles(parseProfiles(text));
-const profileRows = (text: string) => parseProfiles(text).rows.filter((r): r is ProfileRow => r.kind === "profile");
+const profileRows = (text: string) => parseProfiles(text).rows.filter((r): r is ProfileRow => r.kind === "record");
 
 describe("byte-exact round trip", () => {
   it.each(fixtureNames)("fixture %s", (name) => {
@@ -49,14 +49,14 @@ describe("parsing", () => {
   it("reads rows with 15 values as profiles", () => {
     const doc = parseProfiles(`${H}\r\n${ROW1}\r\n${ROW2}\r\n`);
     expect(doc.headerOk).toBe(true);
-    expect(doc.rows.map((r) => r.kind)).toEqual(["profile", "profile"]);
+    expect(doc.rows.map((r) => r.kind)).toEqual(["record", "record"]);
     expect((doc.rows[0] as ProfileRow).values).toEqual(ROW1.split(","));
     expect((doc.rows[0] as ProfileRow).values[5]).toBe("");
   });
 
   it("keeps blank and wrong-length lines as raw rows", () => {
     const doc = parseProfiles(`${H}\r\n\r\nfoo\r\n${ROW1},x\r\n${ROW1}\r\n`);
-    expect(doc.rows.map((r) => r.kind)).toEqual(["raw", "raw", "raw", "profile"]);
+    expect(doc.rows.map((r) => r.kind)).toEqual(["raw", "raw", "raw", "record"]);
   });
 
   it("flags a header that doesn't match exactly", () => {
@@ -109,26 +109,26 @@ describe("serializing edits", () => {
   it("new rows use the file's line ending and keep the trailing newline", () => {
     for (const eol of ["\r\n", "\n"] as const) {
       const doc = parseProfiles(`${H}${eol}${ROW1}${eol}`);
-      doc.rows.push({ kind: "profile", id: -1, values: ROW2.split(","), eol: "" });
+      doc.rows.push({ kind: "record", id: -1, values: ROW2.split(","), eol: "" });
       expect(serializeProfiles(doc)).toBe(`${H}${eol}${ROW1}${eol}${ROW2}${eol}`);
     }
   });
 
   it("adding to a file without a trailing newline keeps it that way", () => {
     const doc = parseProfiles(`${H}\r\n${ROW1}`);
-    doc.rows.push({ kind: "profile", id: -1, values: ROW2.split(","), eol: "" });
+    doc.rows.push({ kind: "record", id: -1, values: ROW2.split(","), eol: "" });
     expect(serializeProfiles(doc)).toBe(`${H}\r\n${ROW1}\r\n${ROW2}`);
   });
 
   it("adding to a header without a newline uses CRLF", () => {
     const doc = parseProfiles(H);
-    doc.rows.push({ kind: "profile", id: -1, values: ROW1.split(","), eol: "" });
+    doc.rows.push({ kind: "record", id: -1, values: ROW1.split(","), eol: "" });
     expect(serializeProfiles(doc)).toBe(`${H}\r\n${ROW1}`);
   });
 
   it("adding to a 0-byte file writes a header, CRLF and a trailing newline", () => {
     const doc = parseProfiles("");
-    doc.rows.push({ kind: "profile", id: -1, values: ROW1.split(","), eol: "" });
+    doc.rows.push({ kind: "record", id: -1, values: ROW1.split(","), eol: "" });
     expect(serializeProfiles(doc)).toBe(`${H}\r\n${ROW1}\r\n`);
   });
 
@@ -175,7 +175,7 @@ describe("fixtures", () => {
   it("parse to the expected rows", () => {
     expect(profileRows(readFixture("crlf.csv").toString("utf8"))).toHaveLength(3);
     const odd = parseProfiles(readFixture("odd-lines.csv").toString("utf8"));
-    expect(odd.rows.map((r) => r.kind)).toEqual(["profile", "raw", "raw", "profile", "raw"]);
+    expect(odd.rows.map((r) => r.kind)).toEqual(["record", "raw", "raw", "record", "raw"]);
     expect(parseProfiles(readFixture("bad-header.csv").toString("utf8")).headerOk).toBe(false);
   });
 });

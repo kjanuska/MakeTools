@@ -14,12 +14,12 @@ import {
 const NAME = 0;
 const COL = Object.fromEntries(PROFILE_FIELDS.map((f, i) => [f, i])) as Record<ProfileField, number>;
 
-export const isProfile = (r: Row): r is ProfileRow => r.kind === "profile";
+export const isProfile = (r: Row): r is ProfileRow => r.kind === "record";
 
 function newRow(values: readonly string[], rowNumber: number, keepName = false): ProfileRow {
   const v = [...values];
   if (!keepName || v[NAME] === "") v[NAME] = String(rowNumber);
-  return { kind: "profile", id: newRowId(), values: v, eol: "" };
+  return { kind: "record", id: newRowId(), values: v, eol: "" };
 }
 
 function appendRows(doc: ProfileDoc, sources: readonly (readonly string[])[], keepNames = false): ProfileDoc {
