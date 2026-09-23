@@ -126,7 +126,7 @@ Details settled while building. Each is small, and the user can change any of th
   - **Rename** warns that tasks referring to the old name aren't updated.
   - **Delete** says how many profiles the group has.
   - Rename, copy and delete are disabled while the group has unsaved changes.
-- **Group names** are file names without `.csv`. They can't be empty, can't start or end with a space and can't end with a dot. They can't be a Windows reserved name. They can't contain `, < > : " /  | ? *` or control characters (a comma or quote would break task CSVs). They must be unique, ignoring case. A rename can change only the case.
+- **Group names** are file names without `.csv`. They can't be empty, can't start or end with a space and can't end with a dot. They can't be a Windows reserved name. They can't contain `, < > : " / \ | ? *` or control characters (a comma or quote would break task CSVs). They must be unique, ignoring case. A rename can change only the case.
 - **Safety:** `create_file` never overwrites an existing file, and `rename_file` refuses to replace another file. Delete and rename back up the file first under its old path. To get a deleted group back, create a group with the same name and restore it from Backups.
 - **Move / copy to group** (editor panel): the selected profiles are added to the end of another editable group with their names kept. Any name clash blocks the whole action. Both groups are left with unsaved changes until saved.
 - Reloading a file that hasn't changed on disk keeps its rows as they are, so selections survive list refreshes.
