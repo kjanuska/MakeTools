@@ -1,0 +1,9 @@
+# Source files: normalize to LF in the repo and working copy.
+* text=auto eol=lf
+
+# Test fixtures must stay byte-exact (line endings, BOM, etc.).
+**/fixtures/** -text
+
+*.png binary
+*.ico binary
+*.icns binary

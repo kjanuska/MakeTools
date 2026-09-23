@@ -1,7 +1,17 @@
 # Dependencies / build output
 node_modules/
 dist/
+dist-ssr/
 src-tauri/target/
+*.local
+
+# Logs
+*.log
+
+# Editor
+.vscode/*
+!.vscode/extensions.json
+.idea/
 
 # Makebot data: contains real credentials, never commit
 Makebot/
