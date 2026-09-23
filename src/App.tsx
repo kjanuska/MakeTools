@@ -1,51 +1,101 @@
-import { useState } from "react";
-import reactLogo from "./assets/react.svg";
-import { invoke } from "@tauri-apps/api/core";
+import { useEffect, useState } from "react";
 import "./App.css";
+import { pickFolder } from "./lib/dialogs";
+import type { FileEntry } from "./lib/fs";
+import { MODULES, type ModuleId } from "./lib/modules";
+import { joinPath } from "./lib/paths";
+import { getMakebotPath, setMakebotPath } from "./lib/settings";
+import { FileList } from "./shell/FileList";
+import { FilePanel } from "./shell/FilePanel";
 
-function App() {
-  const [greetMsg, setGreetMsg] = useState("");
-  const [name, setName] = useState("");
+export default function App() {
+  // undefined while the saved setting is loading
+  const [root, setRoot] = useState<string | null | undefined>(undefined);
+  const [moduleId, setModuleId] = useState<ModuleId>(MODULES[0].id);
+  const [selected, setSelected] = useState<FileEntry | null>(null);
+  const [listVersion, setListVersion] = useState(0);
+  const [error, setError] = useState<string | null>(null);
 
-  async function greet() {
-    // Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
-    setGreetMsg(await invoke("greet", { name }));
+  useEffect(() => {
+    getMakebotPath()
+      .then(setRoot)
+      .catch(() => setRoot(null));
+  }, []);
+
+  async function chooseFolder() {
+    setError(null);
+    try {
+      const path = await pickFolder(root ?? undefined);
+      if (!path) return;
+      await setMakebotPath(path);
+      setRoot(path);
+      setSelected(null);
+    } catch (e) {
+      setError(String(e));
+    }
   }
 
-  return (
-    <main className="container">
-      <h1>Welcome to Tauri + React</h1>
+  function selectModule(id: ModuleId) {
+    setModuleId(id);
+    setSelected(null);
+  }
 
-      <div className="row">
-        <a href="https://vite.dev" target="_blank">
-          <img src="/vite.svg" className="logo vite" alt="Vite logo" />
-        </a>
-        <a href="https://tauri.app" target="_blank">
-          <img src="/tauri.svg" className="logo tauri" alt="Tauri logo" />
-        </a>
-        <a href="https://react.dev" target="_blank">
-          <img src={reactLogo} className="logo react" alt="React logo" />
-        </a>
+  if (root === undefined) return null;
+
+  if (root === null) {
+    return (
+      <div className="welcome">
+        <h1>Make Tools</h1>
+        <p>Choose your Makebot folder (the one with the account, profile, proxy and task folders).</p>
+        <button onClick={chooseFolder}>Choose Makebot folder</button>
+        {error && <p className="error">{error}</p>}
       </div>
-      <p>Click on the Tauri, Vite, and React logos to learn more.</p>
+    );
+  }
 
-      <form
-        className="row"
-        onSubmit={(e) => {
-          e.preventDefault();
-          greet();
-        }}
-      >
-        <input
-          id="greet-input"
-          onChange={(e) => setName(e.currentTarget.value)}
-          placeholder="Enter a name..."
-        />
-        <button type="submit">Greet</button>
-      </form>
-      <p>{greetMsg}</p>
-    </main>
+  const mod = MODULES.find((m) => m.id === moduleId) ?? MODULES[0];
+
+  return (
+    <div className="app">
+      <header className="topbar">
+        <strong>Make Tools</strong>
+        <span className="root-path" title={root}>
+          {root}
+        </span>
+        <button onClick={chooseFolder}>Change folder</button>
+        {error && <span className="error">{error}</span>}
+      </header>
+      <nav className="sidebar" aria-label="Modules">
+        {MODULES.map((m) => (
+          <button
+            key={m.id}
+            className="nav-item"
+            aria-current={m.id === mod.id ? "page" : undefined}
+            onClick={() => selectModule(m.id)}
+          >
+            {m.label}
+          </button>
+        ))}
+      </nav>
+      <FileList
+        key={`${root}|${mod.id}`}
+        dir={joinPath(root, mod.folder)}
+        extension={mod.extension}
+        selectedPath={selected?.path ?? null}
+        onSelect={setSelected}
+        version={listVersion}
+      />
+      <main className="main">
+        {selected ? (
+          <FilePanel
+            key={selected.path}
+            file={selected}
+            onChanged={() => setListVersion((v) => v + 1)}
+          />
+        ) : (
+          <p className="muted">Select a file.</p>
+        )}
+      </main>
+    </div>
   );
 }
-
-export default App;
