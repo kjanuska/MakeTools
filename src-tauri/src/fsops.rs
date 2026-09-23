@@ -302,6 +302,20 @@ pub fn save_bytes(backups: &Backups, path: &Path, data: &[u8], now_ms: u64) -> i
     Ok(())
 }
 
+/// Contents of backup `id` of `path`, for staging a restore without writing.
+/// Refuses backups that aren't valid UTF-8, like `read_text`.
+pub fn read_backup(backups: &Backups, path: &Path, id: &str) -> io::Result<TextFile> {
+    let bytes = backups.read(path, id)?;
+    let has_bom = bytes.starts_with(&[0xEF, 0xBB, 0xBF]);
+    let text = String::from_utf8(bytes).map_err(|_| {
+        io::Error::new(
+            io::ErrorKind::InvalidData,
+            "backup is not valid UTF-8; not opened to avoid corrupting it",
+        )
+    })?;
+    Ok(TextFile { line_ending: detect_line_ending(&text), text, has_bom })
+}
+
 /// Replaces `path` with backup `id`. Goes through `save_bytes`, so the
 /// current contents are backed up first and the restore can be undone.
 pub fn restore_backup(backups: &Backups, path: &Path, id: &str, now_ms: u64) -> io::Result<()> {
@@ -718,6 +732,34 @@ mod tests {
         assert!(restore_backup(&e.backups, &p, "000000000000001", T0).is_err());
         assert_eq!(fs::read(&p).unwrap(), b"keep");
         assert!(e.backups.list(&p).unwrap().is_empty());
+    }
+
+    // ---- read_backup ----
+
+    #[test]
+    fn read_backup_returns_exact_text_and_writes_nothing() {
+        let e = env();
+        let p = e.data.join("g.csv");
+        fs::write(&p, b"\xEF\xBB\xBFold\r\nrow\n").unwrap();
+        save_bytes(&e.backups, &p, b"new", T0).unwrap();
+        let id = e.backups.list(&p).unwrap()[0].id.clone();
+        let t = read_backup(&e.backups, &p, &id).unwrap();
+        assert_eq!(t.text.as_bytes(), b"\xEF\xBB\xBFold\r\nrow\n");
+        assert!(t.has_bom);
+        assert_eq!(t.line_ending, LineEnding::Mixed);
+        assert_eq!(fs::read(&p).unwrap(), b"new");
+        assert_eq!(e.backups.list(&p).unwrap().len(), 1);
+    }
+
+    #[test]
+    fn read_backup_refuses_bad_ids_and_invalid_utf8() {
+        let e = env();
+        let p = e.data.join("g.csv");
+        assert_eq!(read_backup(&e.backups, &p, "../x").unwrap_err().kind(), io::ErrorKind::InvalidInput);
+        fs::write(&p, b"a\xFFb").unwrap();
+        save_bytes(&e.backups, &p, b"new", T0).unwrap();
+        let id = e.backups.list(&p).unwrap()[0].id.clone();
+        assert_eq!(read_backup(&e.backups, &p, &id).unwrap_err().kind(), io::ErrorKind::InvalidData);
     }
 
     // ---- create_file ----

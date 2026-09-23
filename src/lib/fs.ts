@@ -52,6 +52,11 @@ export function restoreBackup(path: string, id: string): Promise<void> {
   return invoke("restore_backup", { path, id });
 }
 
+/** Contents of a backup, without writing anything (for staging a restore). */
+export function readBackup(path: string, id: string): Promise<TextFile> {
+  return invoke("read_backup", { path, id });
+}
+
 /** Creates a new file with exactly `text`. Fails if the file already exists. */
 export function createFile(path: string, text: string): Promise<void> {
   return invoke("create_file", { path, text });

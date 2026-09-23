@@ -1,6 +1,6 @@
 import { mockIPC } from "@tauri-apps/api/mocks";
 import { describe, expect, it } from "vitest";
-import { createFile, deleteFile, listBackups, listFiles, readText, renameFile, restoreBackup, saveText } from "./fs";
+import { createFile, deleteFile, listBackups, listFiles, readBackup, readText, renameFile, restoreBackup, saveText } from "./fs";
 
 function recordIPC(result: unknown = null) {
   const calls: { cmd: string; args: unknown }[] = [];
@@ -47,6 +47,13 @@ describe("fs wrappers", () => {
     expect(calls).toEqual([
       { cmd: "restore_backup", args: { path: "C:\\f.txt", id: "001790000000000" } },
     ]);
+  });
+
+  it("readBackup sends path and id and returns the text untouched", async () => {
+    const file = { text: "a,b\r\nc\n", lineEnding: "mixed", hasBom: false };
+    const calls = recordIPC(file);
+    await expect(readBackup("C:\\f.csv", "001790000000000")).resolves.toEqual(file);
+    expect(calls).toEqual([{ cmd: "read_backup", args: { path: "C:\\f.csv", id: "001790000000000" } }]);
   });
 
   it("createFile sends path and exact text", async () => {

@@ -39,6 +39,11 @@ async fn restore_backup(app: AppHandle, path: String, id: String) -> Result<(), 
 }
 
 #[tauri::command]
+async fn read_backup(app: AppHandle, path: String, id: String) -> Result<TextFile, String> {
+    fsops::read_backup(&backups(&app)?, Path::new(&path), &id).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
 async fn create_file(path: String, text: String) -> Result<(), String> {
     fsops::create_file(Path::new(&path), text.as_bytes()).map_err(|e| e.to_string())
 }
@@ -72,6 +77,7 @@ pub fn run() {
             save_text,
             list_backups,
             restore_backup,
+            read_backup,
             create_file,
             rename_file,
             delete_file
