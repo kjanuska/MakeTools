@@ -11,6 +11,10 @@ export interface DocEntry {
   file: FileEntry;
   /** The file as last read from (or written to) disk. */
   loaded: TextFile;
+  /** `loaded` parsed. Edits keep row ids, so `base` tells what each row was. */
+  base: ProfileDoc;
+  /** Saved values of each profile row in `base`, by row id. */
+  original: ReadonlyMap<number, readonly string[]>;
   doc: ProfileDoc;
   serialized: string;
   dirty: boolean;
@@ -36,7 +40,22 @@ export interface SaveAllResult {
   cancelled: DocEntry[];
 }
 
-function makeEntry(file: FileEntry, loaded: TextFile, doc: ProfileDoc): DocEntry {
+function originalValues(base: ProfileDoc): Map<number, readonly string[]> {
+  return new Map(base.rows.filter(isProfile).map((r) => [r.id, r.values]));
+}
+
+/** A fresh entry whose base is `doc` itself (nothing changed yet). */
+function freshEntry(file: FileEntry, loaded: TextFile, doc: ProfileDoc): DocEntry {
+  return makeEntry(file, loaded, doc, originalValues(doc), doc);
+}
+
+function makeEntry(
+  file: FileEntry,
+  loaded: TextFile,
+  base: ProfileDoc,
+  original: ReadonlyMap<number, readonly string[]>,
+  doc: ProfileDoc,
+): DocEntry {
   const serialized = serializeProfiles(doc);
   const errors = doc.headerOk
     ? validateRecords(PROFILE_FIELDS, PROFILE_RULES, doc.rows.filter(isProfile))
@@ -44,6 +63,8 @@ function makeEntry(file: FileEntry, loaded: TextFile, doc: ProfileDoc): DocEntry
   return {
     file,
     loaded,
+    base,
+    original,
     doc,
     serialized,
     dirty: serialized !== loaded.text,
@@ -51,6 +72,9 @@ function makeEntry(file: FileEntry, loaded: TextFile, doc: ProfileDoc): DocEntry
     errorCount: countErrors(errors),
   };
 }
+
+/** The same entry with a new doc. */
+const withDoc = (e: DocEntry, doc: ProfileDoc) => makeEntry(e.file, e.loaded, e.base, e.original, doc);
 
 export class ProfileStore {
   private entries = new Map<string, DocEntry>();
@@ -96,7 +120,7 @@ export class ProfileStore {
       if (current?.dirty && !force) return; // edited while reading
       // Unchanged on disk: keep the parsed rows (and their ids, so selections survive).
       if (current && !force && current.loaded.text === loaded.text && !this.loadErrors.has(file.path)) return;
-      this.entries.set(file.path, makeEntry(file, loaded, parseProfiles(loaded.text)));
+      this.entries.set(file.path, freshEntry(file, loaded, parseProfiles(loaded.text)));
       this.loadErrors.delete(file.path);
     } catch (e) {
       if (!this.entries.get(file.path)?.dirty) this.entries.delete(file.path);
@@ -115,8 +139,24 @@ export class ProfileStore {
     if (!e || !e.doc.headerOk) return;
     const doc = fn(e.doc);
     if (doc === e.doc) return;
-    this.entries.set(path, makeEntry(e.file, e.loaded, doc));
+    this.entries.set(path, withDoc(e, doc));
     this.changed();
+  }
+
+  /**
+   * Stages other contents (e.g. a backup) as unsaved changes; nothing is
+   * written until saved. Rows are matched to the current file by position,
+   * so changed cells show what they were.
+   */
+  stage(path: string, text: string): { ok: true } | { ok: false; error: string } {
+    const e = this.entries.get(path);
+    if (!e) return { ok: false, error: "File isn't loaded." };
+    const staged = parseProfiles(text);
+    if (!staged.headerOk) return { ok: false, error: "That version doesn't have the profile header, so it can't be edited here." };
+    const rows = staged.rows.map((r, i) => (i < e.base.rows.length ? { ...r, id: e.base.rows[i].id } : r));
+    this.entries.set(path, withDoc(e, { ...staged, rows }));
+    this.changed();
+    return { ok: true };
   }
 
   /** Drops a file from memory, e.g. after it was renamed or deleted. */
@@ -143,10 +183,10 @@ export class ProfileStore {
     if (clashes.length) {
       return { ok: false, error: `${dst.file.name} already has profiles named: ${clashes.join(", ")}. Rename them first.` };
     }
-    this.entries.set(to, makeEntry(dst.file, dst.loaded, importRows(dst.doc, values)));
+    this.entries.set(to, withDoc(dst, importRows(dst.doc, values)));
     if (mode === "move") {
       const moved = new Set(src.doc.rows.filter((r) => ids.includes(r.id) && isProfile(r)).map((r) => r.id));
-      this.entries.set(from, makeEntry(src.file, src.loaded, deleteRows(src.doc, [...moved])));
+      this.entries.set(from, withDoc(src, deleteRows(src.doc, [...moved])));
     }
     this.changed();
     return { ok: true, count: values.length };
@@ -155,7 +195,7 @@ export class ProfileStore {
   discard(path: string): void {
     const e = this.entries.get(path);
     if (!e || !e.dirty) return;
-    this.entries.set(path, makeEntry(e.file, e.loaded, parseProfiles(e.loaded.text)));
+    this.entries.set(path, withDoc(e, e.base));
     this.changed();
   }
 
@@ -176,12 +216,17 @@ export class ProfileStore {
       const text = e.serialized;
       await saveText(path, text);
       const after = await readText(path);
-      // Keep edits made while saving; otherwise start fresh from disk.
+      const verified = after.text === text;
       const latest = this.entries.get(path)!;
-      const doc = latest.doc === e.doc ? parseProfiles(after.text) : latest.doc;
-      this.entries.set(path, makeEntry(e.file, after, doc));
+      if (verified) {
+        // The saved doc becomes the new base, keeping row ids (and selections).
+        // Edits made while saving stay as unsaved changes on top of it.
+        this.entries.set(path, makeEntry(e.file, after, e.doc, originalValues(e.doc), latest.doc));
+      } else {
+        this.entries.set(path, freshEntry(e.file, after, parseProfiles(after.text)));
+      }
       this.changed();
-      return { ok: true, verified: after.text === text };
+      return { ok: true, verified };
     } catch (err) {
       return { ok: false, reason: "error", error: String(err) };
     }

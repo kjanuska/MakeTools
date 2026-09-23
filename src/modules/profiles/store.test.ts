@@ -285,3 +285,90 @@ describe("ProfileStore reloads", () => {
     expect(store.get(f.path)!.serialized).toBe(before.serialized);
   });
 });
+
+describe("ProfileStore change tracking", () => {
+  async function loaded(text: string) {
+    const b = backend({ "g.csv": text });
+    const store = new ProfileStore();
+    const f = entry("g.csv");
+    await store.load(f);
+    return { ...b, store, f, e: () => store.get(f.path)! };
+  }
+
+  it("original holds each row's saved values by id, unchanged by edits", async () => {
+    const { store, f, e } = await loaded(GOOD);
+    const id = e().doc.rows[1].id;
+    store.update(f.path, (d) => setCell(d, id, "city", "Chicago"));
+    expect(e().original.get(id)).toEqual(row("2").split(","));
+    expect(e().doc.rows[1].id).toBe(id);
+  });
+
+  it("new rows have no original values", async () => {
+    const { store, f, e } = await loaded(GOOD);
+    store.update(f.path, (d) => ({ ...d, rows: [...d.rows, { kind: "profile", id: -5, values: row("9").split(","), eol: "" }] }));
+    expect(e().original.has(-5)).toBe(false);
+  });
+
+  it("discard goes back to the base rows, keeping ids", async () => {
+    const { store, f, e } = await loaded(GOOD);
+    const ids = e().doc.rows.map((r) => r.id);
+    store.update(f.path, (d) => setCell(d, ids[0], "city", "Chicago"));
+    store.discard(f.path);
+    expect(e().dirty).toBe(false);
+    expect(e().doc.rows.map((r) => r.id)).toEqual(ids);
+  });
+
+  it("after saving, the saved rows become the base with the same ids", async () => {
+    const { store, f, e } = await loaded(GOOD);
+    const ids = e().doc.rows.map((r) => r.id);
+    store.update(f.path, (d) => setCell(d, ids[0], "city", "Chicago"));
+    await store.save(f.path, yes);
+    expect(e().dirty).toBe(false);
+    expect(e().doc.rows.map((r) => r.id)).toEqual(ids);
+    expect(e().original.get(ids[0])![6]).toBe("Chicago");
+  });
+
+  it("stage puts other contents in as unsaved changes without writing", async () => {
+    const { store, f, e, saves } = await loaded(GOOD);
+    const ids = e().doc.rows.map((r) => r.id);
+    const backup = `${H}\r\n${row("1", "11111")}\r\n${row("2")}\r\n${row("3")}\r\n`;
+    expect(store.stage(f.path, backup)).toEqual({ ok: true });
+    expect(saves).toEqual([]);
+    expect(e().dirty).toBe(true);
+    expect(e().serialized).toBe(backup);
+    // Rows are matched by position: the first keeps its id, the third is new.
+    expect(e().doc.rows.slice(0, 2).map((r) => r.id)).toEqual(ids);
+    expect(e().original.has(e().doc.rows[2].id)).toBe(false);
+    expect(e().original.get(ids[0])![8]).toBe("62701");
+  });
+
+  it("staging then saving writes the staged text exactly", async () => {
+    const { store, f, saves } = await loaded(GOOD);
+    const backup = `${H}\n${row("7")}\n`;
+    store.stage(f.path, backup);
+    await store.save(f.path, yes);
+    expect(saves).toEqual([{ path: f.path, text: backup }]);
+  });
+
+  it("staging the current contents is not a change", async () => {
+    const { store, f, e } = await loaded(GOOD);
+    store.stage(f.path, GOOD);
+    expect(e().dirty).toBe(false);
+  });
+
+  it("discard after staging goes back to the file on disk", async () => {
+    const { store, f, e } = await loaded(GOOD);
+    store.stage(f.path, `${H}\r\n`);
+    store.discard(f.path);
+    expect(e().serialized).toBe(GOOD);
+  });
+
+  it("refuses to stage contents without the profile header", async () => {
+    const { store, f, e } = await loaded(GOOD);
+    expect(store.stage(f.path, "a,b\r\n")).toEqual({
+      ok: false,
+      error: "That version doesn't have the profile header, so it can't be edited here.",
+    });
+    expect(e().dirty).toBe(false);
+  });
+});
