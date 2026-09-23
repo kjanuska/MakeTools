@@ -1,17 +1,9 @@
-import { memo, useCallback, useEffect, useMemo, useState } from "react";
+import { memo, useCallback, useEffect, useRef, useState, type KeyboardEvent, type MouseEvent } from "react";
 import { confirmAction } from "../../lib/dialogs";
 import { LINE_ENDING_LABELS } from "../../lib/format";
-import {
-  PROFILE_FIELDS,
-  parseProfiles,
-  serializeProfiles,
-  type ProfileDoc,
-  type ProfileField,
-  type ProfileRow,
-  type Row,
-} from "../../lib/formats/profiles";
-import { readText, saveText, type FileEntry, type LineEnding } from "../../lib/fs";
-import { countErrors, optionsOf, validateRecords } from "../../lib/rules/engine";
+import { PROFILE_FIELDS, type ProfileField, type ProfileRow, type Row } from "../../lib/formats/profiles";
+import type { FileEntry } from "../../lib/fs";
+import { optionsOf } from "../../lib/rules/engine";
 import { PROFILE_RULES } from "../../lib/rules/profiles";
 import { BackupsPanel } from "../../shell/BackupsPanel";
 import {
@@ -26,139 +18,153 @@ import {
   parseImport,
   setCell,
 } from "./ops";
+import { confirmOverwrite } from "./prompts";
+import { useStoreVersion, type ProfileStore } from "./store";
 
 interface Props {
   file: FileEntry;
+  store: ProfileStore;
   /** Called after the file on disk changed (save or restore). */
-  onChanged: () => void;
-  onDirtyChange: (dirty: boolean) => void;
+  onSaved: () => void;
 }
 
-interface Loaded {
-  /** File contents as last read from disk. */
-  text: string;
-  lineEnding: LineEnding;
-  hasBom: boolean;
-}
-
-type Panel = "bulk" | "template" | "import" | null;
+type Panel = "template" | "import" | null;
 
 type RowErrors = Partial<Record<ProfileField, string>>;
 
 const MAX_LISTED_ERRORS = 50;
 
-export function ProfilesEditor({ file, onChanged, onDirtyChange }: Props) {
-  const [loaded, setLoaded] = useState<Loaded | null>(null);
-  const [doc, setDoc] = useState<ProfileDoc | null>(null);
-  const [selected, setSelected] = useState<Set<number>>(new Set());
+/** Row selection: clicked ids plus the anchor for shift-click ranges. */
+interface Selection {
+  ids: Set<number>;
+  anchor: number | null;
+}
+
+const EMPTY_SELECTION: Selection = { ids: new Set(), anchor: null };
+
+export function ProfilesEditor({ file, store, onSaved }: Props) {
+  useStoreVersion(store);
+  const [selection, setSelection] = useState<Selection>(EMPTY_SELECTION);
   const [panel, setPanel] = useState<Panel>(null);
   const [error, setError] = useState<string | null>(null);
   const [status, setStatus] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [backupsVersion, setBackupsVersion] = useState(0);
+  const gridRef = useRef<HTMLTableElement>(null);
 
-  const applyLoaded = useCallback((l: Loaded) => {
-    setLoaded(l);
-    setDoc(parseProfiles(l.text));
-    setSelected(new Set());
-  }, []);
+  const entry = store.get(file.path);
+  const loadError = store.loadError(file.path);
+  const doc = entry?.doc;
 
-  const load = useCallback(() => {
-    setError(null);
-    readText(file.path)
-      .then(applyLoaded)
-      .catch((e) => {
-        setLoaded(null);
-        setDoc(null);
-        setError(`Couldn't read file: ${e}`);
-      });
-  }, [file.path, applyLoaded]);
+  useEffect(() => {
+    void store.load(file);
+  }, [store, file]);
 
-  useEffect(load, [load]);
+  // Drop selected ids whose rows are gone (deleted, or the file was re-read).
+  useEffect(() => {
+    if (!doc) return;
+    setSelection((s) => {
+      const live = new Set(doc.rows.map((r) => r.id));
+      if ([...s.ids].every((id) => live.has(id)) && (s.anchor === null || live.has(s.anchor))) return s;
+      return {
+        ids: new Set([...s.ids].filter((id) => live.has(id))),
+        anchor: s.anchor !== null && live.has(s.anchor) ? s.anchor : null,
+      };
+    });
+  }, [doc]);
 
-  const serialized = useMemo(() => (doc ? serializeProfiles(doc) : null), [doc]);
-  const dirty = loaded !== null && serialized !== null && serialized !== loaded.text;
-
-  useEffect(() => onDirtyChange(dirty), [dirty, onDirtyChange]);
-  useEffect(() => () => onDirtyChange(false), [onDirtyChange]);
-
-  const profiles = useMemo(() => (doc ? doc.rows.filter(isProfile) : []), [doc]);
-  const errors = useMemo(() => validateRecords(PROFILE_FIELDS, PROFILE_RULES, profiles), [profiles]);
-  const errorCount = countErrors(errors);
-
-  const edit = useCallback((f: (d: ProfileDoc) => ProfileDoc) => {
-    setStatus(null);
-    setDoc((d) => (d ? f(d) : d));
-  }, []);
+  const edit = useCallback(
+    (f: Parameters<ProfileStore["update"]>[1]) => {
+      setStatus(null);
+      store.update(file.path, f);
+    },
+    [store, file.path],
+  );
 
   const onCell = useCallback(
     (id: number, field: ProfileField, value: string) => edit((d) => setCell(d, id, field, value)),
     [edit],
   );
 
-  const onToggle = useCallback((id: number) => {
-    setSelected((s) => {
-      const next = new Set(s);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
+  const rowIds = doc?.rows.map((r) => r.id) ?? [];
+  const rowIdsKey = rowIds.join(",");
+
+  const onRowHead = useCallback(
+    (id: number, e: MouseEvent) => {
+      const ids = rowIdsKey.split(",").map(Number);
+      setSelection((s) => {
+        if (e.shiftKey && s.anchor !== null && ids.includes(s.anchor)) {
+          const [a, b] = [ids.indexOf(s.anchor), ids.indexOf(id)].sort((x, y) => x - y);
+          const range = ids.slice(a, b + 1);
+          const base = e.ctrlKey || e.metaKey ? s.ids : new Set<number>();
+          return { ids: new Set([...base, ...range]), anchor: s.anchor };
+        }
+        if (e.ctrlKey || e.metaKey) {
+          const next = new Set(s.ids);
+          if (next.has(id)) next.delete(id);
+          else next.add(id);
+          return { ids: next, anchor: id };
+        }
+        return { ids: new Set([id]), anchor: id };
+      });
+    },
+    [rowIdsKey],
+  );
+
+  /** Up/Down/Enter move to the same column in the next or previous row. */
+  const onCellKey = useCallback((e: KeyboardEvent<HTMLElement>, rowIndex: number, col: number) => {
+    const isSelect = e.currentTarget.tagName === "SELECT";
+    let delta = 0;
+    if (e.key === "Enter") delta = e.shiftKey ? -1 : 1;
+    else if (!isSelect && e.key === "ArrowDown") delta = 1;
+    else if (!isSelect && e.key === "ArrowUp") delta = -1;
+    if (!delta) return;
+    const target = gridRef.current?.querySelector<HTMLElement>(`[data-row="${rowIndex + delta}"][data-col="${col}"]`);
+    if (target) {
+      e.preventDefault();
+      target.focus();
+    }
   }, []);
 
-  if (error && !doc) {
+  if (!entry || !doc) {
     return (
       <div className="file-panel">
         <h2>{file.name}</h2>
-        <p className="error">{error}</p>
+        {loadError && <p className="error">Couldn't read file: {loadError}</p>}
       </div>
     );
   }
-  if (!doc || !loaded) return null;
 
-  const selectedIds = doc.rows.filter((r) => selected.has(r.id)).map((r) => r.id);
-  const selectedProfiles = profiles.filter((r) => selected.has(r.id));
+  const { dirty, errors, errorCount, loaded } = entry;
+  const profiles = doc.rows.filter(isProfile);
+  const selectedIds = doc.rows.filter((r) => selection.ids.has(r.id)).map((r) => r.id);
+  const selectedProfiles = profiles.filter((r) => selection.ids.has(r.id));
   const rawCount = doc.rows.length - profiles.length;
   const allSelected = doc.rows.length > 0 && selectedIds.length === doc.rows.length;
+  const readOnly = !doc.headerOk;
 
   async function save() {
-    if (!loaded || serialized === null) return;
     setSaving(true);
     setError(null);
     setStatus(null);
-    try {
-      const onDisk = await readText(file.path);
-      if (onDisk.text !== loaded.text) {
-        const ok = await confirmAction(
-          `${file.name} was changed by another program since it was opened here.\n\nOverwrite it with your version? The other version is backed up first.`,
-          "File changed on disk",
-        );
-        if (!ok) return;
-      }
-      await saveText(file.path, serialized);
-      const after = await readText(file.path);
-      applyLoaded(after);
+    const r = await store.save(file.path, confirmOverwrite);
+    setSaving(false);
+    if (r.ok) {
       setBackupsVersion((v) => v + 1);
-      onChanged();
-      if (after.text !== serialized) {
-        setError("Saved, but the file on disk doesn't match what was written. Check it before using it.");
-      } else {
-        setStatus("Saved. The previous version was backed up.");
-      }
-    } catch (e) {
-      setError(`Save failed: ${e}`);
-    } finally {
-      setSaving(false);
+      onSaved();
+      if (r.verified) setStatus("Saved. The previous version was backed up.");
+      else setError("Saved, but the file on disk doesn't match what was written. Check it before using it.");
+    } else if (r.reason === "error") {
+      setError(`Save failed: ${r.error}`);
     }
   }
 
   async function discard() {
     const ok = await confirmAction(`Discard all unsaved changes to ${file.name}?`, "Discard changes");
-    if (!ok || !loaded) return;
-    applyLoaded(loaded);
+    if (!ok) return;
+    store.discard(file.path);
     setStatus(null);
   }
-
-  const readOnly = !doc.headerOk;
 
   return (
     <div className="profiles-editor">
@@ -193,13 +199,7 @@ export function ProfilesEditor({ file, onChanged, onDirtyChange }: Props) {
             <button disabled={selectedProfiles.length === 0} onClick={() => edit((d) => duplicateRows(d, selectedIds))}>
               Duplicate
             </button>
-            <button
-              disabled={selectedIds.length === 0}
-              onClick={() => {
-                edit((d) => deleteRows(d, selectedIds));
-                setSelected(new Set());
-              }}
-            >
+            <button disabled={selectedIds.length === 0} onClick={() => edit((d) => deleteRows(d, selectedIds))}>
               Delete
             </button>
             <button disabled={selectedIds.length === 0} onClick={() => edit((d) => moveRows(d, selectedIds, -1))}>
@@ -211,7 +211,6 @@ export function ProfilesEditor({ file, onChanged, onDirtyChange }: Props) {
             <span className="toolbar-sep" />
             {(
               [
-                ["bulk", "Bulk edit"],
                 ["template", "From template"],
                 ["import", "Paste rows"],
               ] as const
@@ -222,7 +221,7 @@ export function ProfilesEditor({ file, onChanged, onDirtyChange }: Props) {
             ))}
           </div>
 
-          <p className="editor-status">
+          <p className="editor-status" role="status">
             {selectedIds.length > 0 && <span>{selectedIds.length} selected · </span>}
             {errorCount > 0 ? (
               <span className="error">
@@ -235,12 +234,10 @@ export function ProfilesEditor({ file, onChanged, onDirtyChange }: Props) {
             {status && <span className="status"> · {status}</span>}
           </p>
 
-          {panel === "bulk" && (
-            <BulkEditPanel
-              count={selectedProfiles.length}
-              onApply={(field, value) => edit((d) => bulkSet(d, selectedIds, field, value))}
-            />
-          )}
+          <BulkEditPanel
+            count={selectedProfiles.length}
+            onApply={(field, value) => edit((d) => bulkSet(d, selectedIds, field, value))}
+          />
           {panel === "template" && (
             <TemplatePanel
               template={selectedProfiles.length === 1 ? selectedProfiles[0] : null}
@@ -264,19 +261,21 @@ export function ProfilesEditor({ file, onChanged, onDirtyChange }: Props) {
       )}
 
       <div className="grid-wrap">
-        <table className="grid">
+        <table className="grid" ref={gridRef}>
           <thead>
             <tr>
-              <th>
-                <input
-                  type="checkbox"
-                  aria-label="Select all rows"
-                  checked={allSelected}
-                  disabled={readOnly || doc.rows.length === 0}
-                  onChange={() => setSelected(allSelected ? new Set() : new Set(doc.rows.map((r) => r.id)))}
-                />
+              <th
+                className="row-head corner"
+                title="Select all rows"
+                aria-label="Select all rows"
+                aria-selected={allSelected}
+                onClick={() =>
+                  !readOnly &&
+                  setSelection(allSelected ? EMPTY_SELECTION : { ids: new Set(rowIds), anchor: rowIds[0] ?? null })
+                }
+              >
+                #
               </th>
-              <th>#</th>
               {PROFILE_FIELDS.map((f) => (
                 <th key={f}>
                   {f}
@@ -290,12 +289,13 @@ export function ProfilesEditor({ file, onChanged, onDirtyChange }: Props) {
               <GridRow
                 key={r.id}
                 row={r}
-                number={i + 1}
+                index={i}
                 errors={errors.get(r.id)}
-                selected={selected.has(r.id)}
+                selected={selection.ids.has(r.id)}
                 readOnly={readOnly}
                 onCell={onCell}
-                onToggle={onToggle}
+                onRowHead={onRowHead}
+                onCellKey={onCellKey}
               />
             ))}
           </tbody>
@@ -310,8 +310,8 @@ export function ProfilesEditor({ file, onChanged, onDirtyChange }: Props) {
         file={file}
         restoreDisabledReason={dirty ? "Save or discard your changes before restoring a backup." : undefined}
         onRestored={() => {
-          load();
-          onChanged();
+          void store.load(file, true);
+          onSaved();
         }}
       />
     </div>
@@ -320,60 +320,70 @@ export function ProfilesEditor({ file, onChanged, onDirtyChange }: Props) {
 
 interface GridRowProps {
   row: Row;
-  number: number;
+  index: number;
   errors: RowErrors | undefined;
   selected: boolean;
   readOnly: boolean;
   onCell: (id: number, field: ProfileField, value: string) => void;
-  onToggle: (id: number) => void;
+  onRowHead: (id: number, e: MouseEvent) => void;
+  onCellKey: (e: KeyboardEvent<HTMLElement>, rowIndex: number, col: number) => void;
 }
 
 const sameErrors = (a: RowErrors | undefined, b: RowErrors | undefined) =>
   a === b || JSON.stringify(a ?? {}) === JSON.stringify(b ?? {});
 
 const GridRow = memo(
-  function GridRow({ row, number, errors, selected, readOnly, onCell, onToggle }: GridRowProps) {
+  function GridRow({ row, index, errors, selected, readOnly, onCell, onRowHead, onCellKey }: GridRowProps) {
+    const number = index + 1;
     return (
-      <tr className={selected ? "selected" : undefined}>
-        <td>
-          <input
-            type="checkbox"
-            aria-label={`Select row ${number}`}
-            checked={selected}
-            disabled={readOnly}
-            onChange={() => onToggle(row.id)}
-          />
-        </td>
-        <td className="row-number">{number}</td>
+      <tr className={selected ? "selected" : undefined} aria-selected={selected}>
+        <th
+          scope="row"
+          className="row-head"
+          aria-label={`Row ${number}`}
+          onMouseDown={(e) => {
+            if (e.shiftKey) e.preventDefault(); // don't select text on shift-click
+          }}
+          onClick={(e) => !readOnly && onRowHead(row.id, e)}
+        >
+          {number}
+        </th>
         {row.kind === "raw" ? (
           <td colSpan={PROFILE_FIELDS.length} className="raw-row" title="Kept unchanged when saving">
             {row.text === "" ? "(blank line)" : row.text}
             <span className="muted"> · unparseable ({row.text.split(",").length} values), kept unchanged</span>
           </td>
         ) : (
-          PROFILE_FIELDS.map((f, col) => (
-            <td key={f}>
-              <Cell
-                field={f}
-                value={row.values[col]}
-                error={errors?.[f]}
-                label={`Row ${number} ${f}`}
-                disabled={readOnly}
-                onChange={(v) => onCell(row.id, f, v)}
-              />
-            </td>
-          ))
+          PROFILE_FIELDS.map((f, col) => {
+            const error = errors?.[f];
+            return (
+              <td key={f} className={`cell-td cell-${f}${error ? " invalid" : ""}`}>
+                <Cell
+                  field={f}
+                  value={row.values[col]}
+                  error={error}
+                  label={`Row ${number} ${f}`}
+                  disabled={readOnly}
+                  dataRow={index}
+                  dataCol={col}
+                  onChange={(v) => onCell(row.id, f, v)}
+                  onKeyDown={(e) => onCellKey(e, index, col)}
+                />
+              </td>
+            );
+          })
         )}
       </tr>
     );
   },
   (a, b) =>
     a.row === b.row &&
-    a.number === b.number &&
+    a.index === b.index &&
     a.selected === b.selected &&
     a.readOnly === b.readOnly &&
     a.onCell === b.onCell &&
-    a.onToggle === b.onToggle &&
+    a.onRowHead === b.onRowHead &&
+    a.onCellKey === b.onCellKey &&
     sameErrors(a.errors, b.errors),
 );
 
@@ -383,17 +393,24 @@ interface CellProps {
   error?: string;
   label: string;
   disabled?: boolean;
+  dataRow?: number;
+  dataCol?: number;
+  className?: string;
   onChange: (value: string) => void;
+  onKeyDown?: (e: KeyboardEvent<HTMLElement>) => void;
 }
 
-function Cell({ field, value, error, label, disabled, onChange }: CellProps) {
+function Cell({ field, value, error, label, disabled, dataRow, dataCol, className, onChange, onKeyDown }: CellProps) {
   const options = optionsOf(PROFILE_RULES[field]);
   const common = {
     "aria-label": label,
     "aria-invalid": error ? true : undefined,
     title: error ? `${field} ${error}` : undefined,
-    className: `cell cell-${field}${error ? " invalid" : ""}`,
+    className: className ?? "cell",
     disabled,
+    "data-row": dataRow,
+    "data-col": dataCol,
+    onKeyDown,
   };
   if (options) {
     return (
@@ -407,7 +424,7 @@ function Cell({ field, value, error, label, disabled, onChange }: CellProps) {
       </select>
     );
   }
-  return <input {...common} value={value} spellCheck={false} onChange={(e) => onChange(e.target.value)} />;
+  return <input {...common} value={value} spellCheck={false} autoComplete="off" onChange={(e) => onChange(e.target.value)} />;
 }
 
 function ErrorList({ rows, errors }: { rows: Row[]; errors: Map<number, RowErrors> }) {
@@ -435,6 +452,7 @@ function BulkEditPanel({ count, onApply }: { count: number; onApply: (field: Pro
   const [value, setValue] = useState("");
   return (
     <section className="action-panel" aria-label="Bulk edit">
+      <strong>Bulk edit</strong>
       <label>
         Field{" "}
         <select
@@ -452,12 +470,12 @@ function BulkEditPanel({ count, onApply }: { count: number; onApply: (field: Pro
         </select>
       </label>
       <label>
-        New value <Cell field={field} value={value} label="New value" onChange={setValue} />
+        New value <Cell field={field} value={value} label="New value" className="panel-input" onChange={setValue} />
       </label>
       <button disabled={count === 0} onClick={() => onApply(field, value)}>
         Set on {count} selected {count === 1 ? "row" : "rows"}
       </button>
-      {count === 0 && <span className="muted">Select rows first (the top checkbox selects all).</span>}
+      {count === 0 && <span className="muted">Select rows by clicking their numbers (Shift for a range, Ctrl to add).</span>}
     </section>
   );
 }

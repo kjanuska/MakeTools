@@ -56,7 +56,7 @@ No masking. Card numbers and CVVs are shown in full in the grid. They are still 
 ## Operations
 Per group (the file being edited):
 - Add, delete, duplicate and reorder rows.
-- **Bulk edit:** select many rows (or the whole group) and set one field to the same value on all of them.
+- **Bulk edit:** select many rows (or the whole group) and set one field to the same value on all of them. The bulk edit panel is always open.
 - **Create from template:** pick an existing row as a template and create N new rows from it.
 - **Default profileName for new rows** (added, from a template or pasted without a name): the row's 1-based position in the file, not counting the header. For example, a new 51st row gets `51`. It can be edited afterwards. If that name is already taken, the uniqueness rule flags it like any other duplicate.
 - **Import:** paste rows in the same 15-column comma-separated format and add them to the group. They're validated like any other row.
@@ -69,10 +69,17 @@ Every change is saved through `save_text`, which makes a backup first. **Renamin
 
 ## UI
 - **Groups overview:** every group with its profile count, the **total number of profiles** across all groups, and each group's validation status.
-- **Group grid:** one row per profile and one column per field. Cells can be edited inline, with dropdowns where the rule has a value list. Invalid cells are highlighted with the reason, and rows can be multi-selected for bulk actions.
+- **Group grid (like Ron's Data Edit):** one row per profile and one column per field.
+  - The whole cell is the input, with no boxes inside cells. Cells with a value list are dropdowns.
+  - Invalid cells are highlighted red with the reason.
+  - Rows are selected by clicking the row number: Shift-click selects a range, Ctrl-click adds or removes a row, and the `#` header selects all. There are no checkboxes.
+  - Enter / Shift+Enter and Up/Down move between rows in the same column.
 - **Quick lookup:** search `profileName` across all groups to see what already exists.
 - **Unused profiles:** deferred to the Tasks module, which will show which profiles or groups no task refers to.
-- Unsaved changes are marked. Leaving a file or closing the app with unsaved changes asks first.
+- **Unsaved changes (like git status):** edits stay in memory per file, so you can switch files and modules freely without being asked.
+  - Changed files get a ● next to their name in the file list and are listed under "Unsaved changes" in the sidebar (`M profile/<file>`). Clicking one opens it. **Save all** saves every changed file without errors and reports the rest.
+  - The only prompt is on **closing the app**, and on switching the Makebot folder: Save all / Discard / Cancel. If a file can't be saved (for example, it has errors), the app stays open and explains why.
+- **Files with validation errors are highlighted red** in the file list, including files not opened yet (every profile file is checked when the list loads) and files with a wrong header.
 
 ## Tests
 Same change as the feature, following the project's testing rules:
@@ -106,5 +113,6 @@ Details settled while building. Each is small, and the user can change any of th
 - **Template count** is 1–1000 per action.
 - **Save safety:** before writing, the file is read again. If another program (such as Ron's Data Edit) changed it since it was opened here, the app asks before overwriting it. After writing, the file is read back and compared with what was sent.
 - **Restoring a backup** is disabled while there are unsaved changes.
-- **Unsaved changes** trigger a prompt before switching file, module or folder, or closing the window. The window close needs the `core:window:allow-destroy` capability.
-- Code: format in `src/lib/formats/profiles.ts`, rules engine and config in `src/lib/rules/`, edit operations in `src/modules/profiles/ops.ts`, and UI in `src/modules/profiles/ProfilesEditor.tsx`.
+- The close prompt needs the `core:window:allow-destroy` and `dialog:allow-message` capabilities.
+- Changed after the first 2a check (2026-09-23): shift-select, the always-open bulk edit panel, git-status-style unsaved changes with no prompt when switching files, red highlighting for invalid files, and the Ron's Data Edit-style grid.
+- Code: format in `src/lib/formats/profiles.ts`, rules engine and config in `src/lib/rules/`, edit operations in `src/modules/profiles/ops.ts`, open files and unsaved edits in `src/modules/profiles/store.ts`, UI in `src/modules/profiles/ProfilesEditor.tsx`, and the sidebar list in `src/shell/ChangesPanel.tsx`.

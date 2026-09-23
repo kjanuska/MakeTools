@@ -270,20 +270,27 @@ button[aria-pressed="true"] {
   border-collapse: collapse;
 }
 
-.grid th {
+.grid thead th {
   position: sticky;
   top: 0;
-  z-index: 1;
+  z-index: 2;
   background: var(--panel);
   text-align: left;
   font-weight: 600;
   white-space: nowrap;
 }
 
+.grid thead th {
+  padding: 4px 6px;
+}
+
 .grid th,
 .grid td {
-  padding: 2px 4px;
   border-bottom: 1px solid var(--border);
+}
+
+.grid .raw-row {
+  padding: 3px 6px;
 }
 
 .grid tr.selected td {
@@ -311,33 +318,143 @@ textarea {
   padding: 2px 4px;
 }
 
-.cell {
+/* Spreadsheet-style cells: the whole cell is the input. */
+.grid .cell-td {
+  padding: 0;
   width: 130px;
+  min-width: 130px;
+  border-right: 1px solid var(--border);
 }
 
-.cell-profileName,
-.cell-state,
-.cell-country,
-.cell-ccMonth,
-.cell-ccYear,
-.cell-cvv {
-  width: 70px;
+.grid .cell-profileName,
+.grid .cell-state,
+.grid .cell-country,
+.grid .cell-ccMonth,
+.grid .cell-ccYear,
+.grid .cell-cvv {
+  width: 72px;
+  min-width: 72px;
 }
 
-.cell-email,
-.cell-address1,
-.cell-ccNumber {
+.grid .cell-email,
+.grid .cell-address1,
+.grid .cell-ccNumber {
   width: 180px;
+  min-width: 180px;
 }
 
-.cell.invalid {
-  border-color: var(--error);
-  outline: 1px solid var(--error);
-  background: color-mix(in srgb, var(--error) 10%, var(--bg));
+.grid .cell {
+  display: block;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  padding: 3px 6px;
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  outline: none;
+}
+
+.grid .cell:focus {
+  box-shadow: inset 0 0 0 2px var(--accent);
+  background: var(--bg);
+}
+
+.grid td.invalid {
+  background: color-mix(in srgb, var(--error) 18%, var(--bg));
+  box-shadow: inset 0 0 0 1px var(--error);
+}
+
+.grid .row-head {
+  position: sticky;
+  left: 0;
+  z-index: 1;
+  min-width: 40px;
+  padding: 3px 8px;
+  text-align: right;
+  color: var(--muted);
+  background: var(--panel);
+  border-right: 1px solid var(--border);
+  cursor: pointer;
+  user-select: none;
+}
+
+.grid thead .row-head.corner {
+  z-index: 3;
+}
+
+.grid tr.selected .row-head {
+  background: var(--accent);
+  color: #fff;
+}
+
+.panel-input {
+  min-width: 160px;
 }
 
 .error-list ul {
   margin: 0;
   padding-left: 20px;
   color: var(--error);
+}
+
+/* File list and sidebar markers */
+
+.file-item.invalid,
+.change-item.invalid {
+  color: var(--error);
+  background: color-mix(in srgb, var(--error) 12%, transparent);
+}
+
+.file-item.invalid[aria-current] {
+  box-shadow: inset 3px 0 0 var(--accent);
+}
+
+.modified-dot {
+  color: var(--accent);
+}
+
+.sidebar nav {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.changes {
+  margin-top: 16px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border);
+  overflow-y: auto;
+}
+
+.changes h3 {
+  margin: 0 0 6px;
+  font-size: 13px;
+}
+
+.changes ul {
+  list-style: none;
+  margin: 0 0 8px;
+  padding: 0;
+}
+
+.change-item {
+  width: 100%;
+  border: none;
+  background: transparent;
+  text-align: left;
+  padding: 2px 4px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.change-mark {
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.changes-message {
+  white-space: pre-wrap;
+  font-size: 12px;
 }

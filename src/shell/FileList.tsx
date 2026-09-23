@@ -9,9 +9,20 @@ interface Props {
   onSelect: (file: FileEntry) => void;
   /** Bump to reload the list. */
   version: number;
+  /** Called with the files each time the list loads. */
+  onLoaded?: (files: FileEntry[]) => void;
+  /** Per-file state shown in the list. */
+  marker?: (file: FileEntry) => FileMarker | undefined;
 }
 
-export function FileList({ dir, extension, selectedPath, onSelect, version }: Props) {
+export interface FileMarker {
+  /** Unsaved changes. */
+  modified?: boolean;
+  /** Validation errors. */
+  invalid?: boolean;
+}
+
+export function FileList({ dir, extension, selectedPath, onSelect, version, onLoaded, marker }: Props) {
   const [files, setFiles] = useState<FileEntry[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [reloads, setReloads] = useState(0);
@@ -21,7 +32,9 @@ export function FileList({ dir, extension, selectedPath, onSelect, version }: Pr
     setError(null);
     listFiles(dir, extension)
       .then((f) => {
-        if (!cancelled) setFiles(f);
+        if (cancelled) return;
+        setFiles(f);
+        onLoaded?.(f);
       })
       .catch((e) => {
         if (cancelled) return;
@@ -31,6 +44,7 @@ export function FileList({ dir, extension, selectedPath, onSelect, version }: Pr
     return () => {
       cancelled = true;
     };
+    // onLoaded is deliberately not a dependency: it shouldn't trigger reloads.
   }, [dir, extension, version, reloads]);
 
   return (
@@ -49,18 +63,27 @@ export function FileList({ dir, extension, selectedPath, onSelect, version }: Pr
       {files && files.length === 0 && <p className="muted">No .{extension} files.</p>}
       {files && files.length > 0 && (
         <ul>
-          {files.map((f) => (
-            <li key={f.path}>
-              <button
-                className="file-item"
-                aria-current={f.path === selectedPath ? "true" : undefined}
-                onClick={() => onSelect(f)}
-              >
-                <span>{f.name}</span>
-                <span className="muted">{formatSize(f.size)}</span>
-              </button>
-            </li>
-          ))}
+          {files.map((f) => {
+            const m = marker?.(f);
+            const notes = [m?.modified && "unsaved changes", m?.invalid && "has errors"].filter(Boolean).join(", ");
+            return (
+              <li key={f.path}>
+                <button
+                  className={`file-item${m?.invalid ? " invalid" : ""}`}
+                  aria-current={f.path === selectedPath ? "true" : undefined}
+                  aria-description={notes || undefined}
+                  title={notes || undefined}
+                  onClick={() => onSelect(f)}
+                >
+                  <span>
+                    {f.name}
+                    {m?.modified && <span className="modified-dot"> ●</span>}
+                  </span>
+                  <span className="muted">{formatSize(f.size)}</span>
+                </button>
+              </li>
+            );
+          })}
         </ul>
       )}
     </section>

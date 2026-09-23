@@ -9,7 +9,7 @@ import { getMakebotPath, setMakebotPath } from "./lib/settings";
 import { guardWindowClose } from "./lib/window";
 
 vi.mock("./lib/settings", () => ({ getMakebotPath: vi.fn(), setMakebotPath: vi.fn() }));
-vi.mock("./lib/dialogs", () => ({ pickFolder: vi.fn(), confirmAction: vi.fn() }));
+vi.mock("./lib/dialogs", () => ({ pickFolder: vi.fn(), confirmAction: vi.fn(), askSaveDiscardCancel: vi.fn(), showMessage: vi.fn() }));
 vi.mock("./lib/window", () => ({ guardWindowClose: vi.fn() }));
 
 const ROOT = "C:\\Makebot";
