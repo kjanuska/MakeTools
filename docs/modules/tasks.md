@@ -48,7 +48,7 @@ All rules live in `src/lib/rules/tasks.ts`, using the same engine and one-line-p
 | accountGroup | **dropdown** of `account/*.txt` | required; must exist |
 | input | text, plus a read-only **parsed** column | required; cleaned up automatically; no classifying or lowercasing |
 | size | text; **`random` is shown distinctly** (e.g. a 🎲 random chip) | required; free string, e.g. `9&9.5&10`, `Medium&Large`, `whole` |
-| color | text; **`random` shown distinctly** | free string (2 current rows are empty, so empty is allowed; confirm) |
+| color | text; **`random` shown distinctly** | required; free string (the 2 current rows with an empty color will show as errors) |
 | site | **dropdown** of the global site list, plus **"Add site…"** | required; must be in the list |
 | mode | **ordered multi-select** of mode parts (see Modes) | required; must split into known parts |
 | cartQuantity | **spin button** | whole number ≥ 1 |
@@ -79,7 +79,7 @@ A mode is an **ordered list of parts joined with no separator**, e.g. `preload` 
   - Main modes: `preload`, `direct`. Also `safe`, `fast` and `human`, which the guide lists as discontinued.
   - Sub-modes: `wait`, `pause`, `login`, `stuck`, `shoppay`, `lite`, `store`, `free`.
   - Supreme JP only: `cod`.
-  - Found in the files but **not in the guide** (flagged for later): `paypal`, `monitor`.
+  - Found in the files but not in the guide: `paypal`, `monitor`. The user confirmed they're real modes.
 - **Order and combinations:** the guide's examples are `preloadwait`, `preloadstuck`, `preloadstuckwait`, `preloadwaitlite`, `preloadwaitlitestuck`, `preloadstore`, `fastwait`, `safewait` and `directwait`. Your files also use `preloadwaitstuck`, `directstuck`, `preloadlite` and `login` alone. The rules for which parts can combine, and in what order, are **unclear and flagged for later**. For now any order is accepted.
 
 ## Operations (3a)
@@ -103,5 +103,4 @@ Profiles and tasks are both unquoted CSVs with a fixed header. The CSV parser, t
 - More validation for input.
 
 ## Open questions
-1. **color empty:** 2 current rows have an empty `color`. Is empty allowed, or is it required like `size`?
-2. **Modes not in the guide:** are `paypal` and `monitor` real modes (keep them as parts), or leftovers?
+_None._ (Round 3, 2026-09-23: `color` is required; `paypal` and `monitor` are real modes.)
