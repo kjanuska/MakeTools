@@ -38,6 +38,22 @@ async fn restore_backup(app: AppHandle, path: String, id: String) -> Result<(), 
         .map_err(|e| e.to_string())
 }
 
+#[tauri::command]
+async fn create_file(path: String, text: String) -> Result<(), String> {
+    fsops::create_file(Path::new(&path), text.as_bytes()).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+async fn rename_file(app: AppHandle, from: String, to: String) -> Result<(), String> {
+    fsops::rename_file(&backups(&app)?, Path::new(&from), Path::new(&to), fsops::now_ms())
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+async fn delete_file(app: AppHandle, path: String) -> Result<(), String> {
+    fsops::delete_file(&backups(&app)?, Path::new(&path), fsops::now_ms()).map_err(|e| e.to_string())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -55,7 +71,10 @@ pub fn run() {
             read_text,
             save_text,
             list_backups,
-            restore_backup
+            restore_backup,
+            create_file,
+            rename_file,
+            delete_file
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

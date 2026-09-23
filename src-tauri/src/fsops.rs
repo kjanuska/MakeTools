@@ -4,7 +4,7 @@
 
 use serde::Serialize;
 use sha2::{Digest, Sha256};
-use std::fs::{self, File};
+use std::fs::{self, File, OpenOptions};
 use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -307,6 +307,46 @@ pub fn save_bytes(backups: &Backups, path: &Path, data: &[u8], now_ms: u64) -> i
 pub fn restore_backup(backups: &Backups, path: &Path, id: &str, now_ms: u64) -> io::Result<()> {
     let data = backups.read(path, id)?;
     save_bytes(backups, path, &data, now_ms)
+}
+
+/// Creates `path` containing exactly `data`. Fails if anything already
+/// exists there, so it can never overwrite a file.
+pub fn create_file(path: &Path, data: &[u8]) -> io::Result<()> {
+    let mut f = OpenOptions::new().write(true).create_new(true).open(path)?;
+    let result = f.write_all(data).and_then(|_| f.sync_all());
+    if result.is_err() {
+        drop(f);
+        let _ = fs::remove_file(path);
+    }
+    result
+}
+
+fn same_path(a: &Path, b: &Path) -> io::Result<bool> {
+    let (a, b) = (std::path::absolute(a)?, std::path::absolute(b)?);
+    let (a, b) = (a.to_string_lossy(), b.to_string_lossy());
+    Ok(if cfg!(windows) { a.to_lowercase() == b.to_lowercase() } else { a == b })
+}
+
+/// Renames `from` to `to` after backing up `from` (under its old path).
+/// Refuses to replace an existing file, except for a case-only rename of
+/// the same file on Windows.
+pub fn rename_file(backups: &Backups, from: &Path, to: &Path, now_ms: u64) -> io::Result<()> {
+    let current = fs::read(from)?;
+    if fs::symlink_metadata(to).is_ok() && !same_path(from, to)? {
+        return Err(io::Error::new(
+            io::ErrorKind::AlreadyExists,
+            "a file with that name already exists",
+        ));
+    }
+    backups.create(from, &current, now_ms)?;
+    fs::rename(from, to)
+}
+
+/// Deletes `path` after backing it up.
+pub fn delete_file(backups: &Backups, path: &Path, now_ms: u64) -> io::Result<()> {
+    let current = fs::read(path)?;
+    backups.create(path, &current, now_ms)?;
+    fs::remove_file(path)
 }
 
 #[cfg(test)]
@@ -677,6 +717,124 @@ mod tests {
         fs::write(&p, b"keep").unwrap();
         assert!(restore_backup(&e.backups, &p, "000000000000001", T0).is_err());
         assert_eq!(fs::read(&p).unwrap(), b"keep");
+        assert!(e.backups.list(&p).unwrap().is_empty());
+    }
+
+    // ---- create_file ----
+
+    #[test]
+    fn create_writes_exact_bytes() {
+        let e = env();
+        let p = e.data.join("new.csv");
+        create_file(&p, b"h1,h2\r\n").unwrap();
+        assert_eq!(fs::read(&p).unwrap(), b"h1,h2\r\n");
+        assert!(e.backups.list(&p).unwrap().is_empty());
+    }
+
+    #[test]
+    fn create_never_overwrites() {
+        let e = env();
+        let p = e.data.join("f.csv");
+        fs::write(&p, "keep").unwrap();
+        let err = create_file(&p, b"new").unwrap_err();
+        assert_eq!(err.kind(), io::ErrorKind::AlreadyExists);
+        assert_eq!(fs::read(&p).unwrap(), b"keep");
+    }
+
+    #[test]
+    fn create_never_overwrites_different_case() {
+        let e = env();
+        fs::write(e.data.join("F.csv"), "keep").unwrap();
+        let result = create_file(&e.data.join("f.csv"), b"new");
+        if cfg!(windows) {
+            assert_eq!(result.unwrap_err().kind(), io::ErrorKind::AlreadyExists);
+        }
+        assert_eq!(fs::read(e.data.join("F.csv")).unwrap(), b"keep");
+    }
+
+    #[test]
+    fn create_errors_when_folder_missing() {
+        let e = env();
+        assert!(create_file(&e.data.join("nope").join("f.csv"), b"x").is_err());
+    }
+
+    // ---- rename_file ----
+
+    #[test]
+    fn rename_moves_bytes_and_backs_up_under_old_path() {
+        let e = env();
+        let (a, b) = (e.data.join("a.csv"), e.data.join("b.csv"));
+        fs::write(&a, b"x,y\r\n1,2").unwrap();
+        rename_file(&e.backups, &a, &b, T0).unwrap();
+        assert!(!a.exists());
+        assert_eq!(fs::read(&b).unwrap(), b"x,y\r\n1,2");
+        let backups = e.backups.list(&a).unwrap();
+        assert_eq!(backups.len(), 1);
+        assert_eq!(e.backups.read(&a, &backups[0].id).unwrap(), b"x,y\r\n1,2");
+    }
+
+    #[test]
+    fn rename_refuses_to_replace_another_file() {
+        let e = env();
+        let (a, b) = (e.data.join("a.csv"), e.data.join("b.csv"));
+        fs::write(&a, "a").unwrap();
+        fs::write(&b, "b").unwrap();
+        let err = rename_file(&e.backups, &a, &b, T0).unwrap_err();
+        assert_eq!(err.kind(), io::ErrorKind::AlreadyExists);
+        assert_eq!(fs::read(&a).unwrap(), b"a");
+        assert_eq!(fs::read(&b).unwrap(), b"b");
+        assert!(e.backups.list(&a).unwrap().is_empty());
+    }
+
+    #[test]
+    fn rename_allows_case_only_change() {
+        let e = env();
+        let (a, b) = (e.data.join("group.csv"), e.data.join("Group.csv"));
+        fs::write(&a, "a").unwrap();
+        rename_file(&e.backups, &a, &b, T0).unwrap();
+        let names: Vec<_> = list_files(&e.data, "csv").unwrap().into_iter().map(|f| f.name).collect();
+        assert_eq!(names, ["Group.csv"]);
+        assert_eq!(fs::read(&b).unwrap(), b"a");
+    }
+
+    #[test]
+    fn rename_errors_when_source_missing() {
+        let e = env();
+        let err = rename_file(&e.backups, &e.data.join("nope.csv"), &e.data.join("b.csv"), T0).unwrap_err();
+        assert_eq!(err.kind(), io::ErrorKind::NotFound);
+        assert!(!e.data.join("b.csv").exists());
+    }
+
+    // ---- delete_file ----
+
+    #[test]
+    fn delete_backs_up_then_removes() {
+        let e = env();
+        let p = e.data.join("g.csv");
+        fs::write(&p, b"h\r\nrow\r\n").unwrap();
+        delete_file(&e.backups, &p, T0).unwrap();
+        assert!(!p.exists());
+        let backups = e.backups.list(&p).unwrap();
+        assert_eq!(backups.len(), 1);
+        assert_eq!(e.backups.read(&p, &backups[0].id).unwrap(), b"h\r\nrow\r\n");
+    }
+
+    #[test]
+    fn deleted_file_can_be_restored() {
+        let e = env();
+        let p = e.data.join("g.csv");
+        fs::write(&p, b"data").unwrap();
+        delete_file(&e.backups, &p, T0).unwrap();
+        let id = e.backups.list(&p).unwrap()[0].id.clone();
+        restore_backup(&e.backups, &p, &id, T0 + 1).unwrap();
+        assert_eq!(fs::read(&p).unwrap(), b"data");
+    }
+
+    #[test]
+    fn delete_errors_when_missing_and_makes_no_backup() {
+        let e = env();
+        let p = e.data.join("nope.csv");
+        assert_eq!(delete_file(&e.backups, &p, T0).unwrap_err().kind(), io::ErrorKind::NotFound);
         assert!(e.backups.list(&p).unwrap().is_empty());
     }
 
