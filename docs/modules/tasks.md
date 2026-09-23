@@ -1,6 +1,6 @@
 # Tasks module spec
 
-Status: **draft, awaiting user approval**. Interview rounds 1–2 were held on 2026-09-23. Nothing is built until the user approves it.
+Status: **approved** by the user on 2026-09-23 (interview rounds 1–3).
 
 The work is split in two:
 - **3a (this spec):** editing task files, with the same editor as profiles plus task-specific fields and links.
