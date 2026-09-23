@@ -1,10 +1,19 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import "./App.css";
-import { askSaveDiscardCancel, pickFolder, showMessage } from "./lib/dialogs";
+import { TableEditor } from "./components/table/TableEditor";
+import { TableOverview } from "./components/table/TableOverview";
+import { askSaveDiscardCancel, confirmAction, pickFolder, showMessage } from "./lib/dialogs";
 import type { FileEntry } from "./lib/fs";
 import { MODULES, type ModuleId } from "./lib/modules";
 import { joinPath } from "./lib/paths";
-import { getMakebotPath, getShortcutOverrides, setMakebotPath, setShortcutOverrides } from "./lib/settings";
+import {
+  getMakebotPath,
+  getShortcutOverrides,
+  getSites,
+  setMakebotPath,
+  setShortcutOverrides,
+  setSites as saveSites,
+} from "./lib/settings";
 import {
   DEFAULT_BINDINGS,
   handleShortcutKey,
@@ -13,17 +22,25 @@ import {
   useShortcuts,
   type Bindings,
 } from "./lib/shortcuts";
+import type { TableStore } from "./lib/table/store";
+import { useStoreVersion } from "./lib/table/store";
 import { guardWindowClose } from "./lib/window";
 import { GroupsOverview } from "./modules/profiles/GroupsOverview";
 import { ProfilesEditor } from "./modules/profiles/ProfilesEditor";
 import { confirmOverwrite } from "./modules/profiles/prompts";
-import { ProfileStore, useStoreVersion } from "./modules/profiles/store";
+import { ProfileStore } from "./modules/profiles/store";
+import { buildTaskContext, contextKey } from "./modules/tasks/context";
+import { renameSiteEverywhere, siteUsage, usedSites } from "./modules/tasks/sites";
+import { TaskStore } from "./modules/tasks/store";
+import { makeTaskUI } from "./modules/tasks/ui";
 import { ChangesPanel } from "./shell/ChangesPanel";
 import { FileList } from "./shell/FileList";
 import { FilePanel } from "./shell/FilePanel";
 import { SettingsPage } from "./shell/SettingsPage";
+import { SitesSettings } from "./shell/SitesSettings";
+import { useFolders } from "./shell/useFolders";
 
-const PROFILES_FOLDER = MODULES.find((m) => m.id === "profiles")!.folder;
+const folderOf = (id: ModuleId) => MODULES.find((m) => m.id === id)!.folder;
 
 export default function App() {
   // undefined while the saved setting is loading
@@ -32,11 +49,10 @@ export default function App() {
   const [selected, setSelected] = useState<FileEntry | null>(null);
   const [listVersion, setListVersion] = useState(0);
   const [error, setError] = useState<string | null>(null);
-  const [store] = useState(() => new ProfileStore());
+  const [profileStore] = useState(() => new ProfileStore());
+  const [taskStore] = useState(() => new TaskStore());
   const [savingAll, setSavingAll] = useState(false);
   const [changesMessage, setChangesMessage] = useState<string | null>(null);
-  // The profile folder's files (for the overview and move/copy targets).
-  const [profileFiles, setProfileFiles] = useState<FileEntry[] | null>(null);
   // Row to jump to when a file is opened from the overview search.
   const [highlight, setHighlight] = useState<number | undefined>(undefined);
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -45,12 +61,25 @@ export default function App() {
   bindingsRef.current = bindings;
   // Bumped to focus the overview's search box.
   const [findRequest, setFindRequest] = useState(0);
-  useStoreVersion(store);
+  // The global site list: undefined while loading, null if never saved (seeded from the task files).
+  const [sites, setSites] = useState<string[] | null | undefined>(undefined);
+  const [tasksScanned, setTasksScanned] = useState(false);
+  const profileVersion = useStoreVersion(profileStore);
+  useStoreVersion(taskStore);
+  const folders = useFolders(root, listVersion);
+
+  const stores: Partial<Record<ModuleId, TableStore<never>>> = {
+    profiles: profileStore as unknown as TableStore<never>,
+    tasks: taskStore as unknown as TableStore<never>,
+  };
 
   useEffect(() => {
     getShortcutOverrides()
       .then((o) => setBindings(resolveBindings(o)))
       .catch(() => {});
+    getSites()
+      .then(setSites)
+      .catch(() => setSites(null));
   }, []);
 
   useEffect(() => {
@@ -59,9 +88,86 @@ export default function App() {
     return () => window.removeEventListener("keydown", onKey);
   }, []);
 
+  // Load every profile and task file, so links, counts and error marks are known.
+  const profileFiles = folders.profiles.files;
+  const taskFiles = folders.tasks.files;
+  useEffect(() => {
+    if (profileFiles) void profileStore.scan(profileFiles);
+  }, [profileFiles, profileStore]);
+  useEffect(() => {
+    if (!taskFiles) return;
+    void taskStore.scan(taskFiles).then(() => setTasksScanned(true));
+  }, [taskFiles, taskStore]);
+
+  // First run: the site list starts as the sites the task files already use.
+  useEffect(() => {
+    if (sites !== null || !tasksScanned) return;
+    const seeded = usedSites(taskStore);
+    setSites(seeded);
+    saveSites(seeded).catch((e) => setError(`Couldn't save the site list: ${e}`));
+  }, [sites, tasksScanned, taskStore]);
+
+  // Task checks depend on the other folders, the profiles in them and the site list.
+  const taskContext = useMemo(
+    () => buildTaskContext(folders.profiles, folders.proxies, folders.accounts, profileStore, sites),
+    // profileVersion: profile edits change the profile names tasks can use.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [folders.profiles, folders.proxies, folders.accounts, profileStore, sites, profileVersion],
+  );
+  const lastContextKey = useRef("");
+  useEffect(() => {
+    const key = contextKey(taskContext);
+    if (key === lastContextKey.current) return;
+    lastContextKey.current = key;
+    taskStore.setContext(taskContext);
+  }, [taskContext, taskStore]);
+
   function changeBindings(next: Bindings) {
     setBindings(next);
     setShortcutOverrides(overridesFor(next)).catch((e) => setError(`Couldn't save shortcuts: ${e}`));
+  }
+
+  function updateSites(next: string[]) {
+    setSites(next);
+    saveSites(next).catch((e) => setError(`Couldn't save the site list: ${e}`));
+  }
+
+  const sitesRef = useRef(sites);
+  sitesRef.current = sites;
+  const [taskUI] = useState(() =>
+    makeTaskUI((site) => {
+      const current = sitesRef.current ?? [];
+      if (!current.includes(site)) updateSites([...current, site]);
+    }),
+  );
+
+  async function renameSite(from: string, to: string): Promise<string | null> {
+    const u = siteUsage(taskStore, from);
+    const ok = await confirmAction(
+      `Rename ${from} to ${to}?\n\nThis changes it everywhere: ${u.rows} ${u.rows === 1 ? "task" : "tasks"} in ${u.files} ${u.files === 1 ? "file" : "files"}. Files are saved right away (each is backed up first); files with other unsaved changes get the rename added to those changes.`,
+      "Rename site",
+    );
+    if (!ok) return null;
+    updateSites((sites ?? []).map((s) => (s === from ? to : s)));
+    const r = await renameSiteEverywhere(taskStore, from, to, confirmOverwrite);
+    setListVersion((v) => v + 1);
+    const parts = [`Renamed ${from} to ${to}. Saved ${r.saved.length} ${r.saved.length === 1 ? "file" : "files"}.`];
+    if (r.unsaved.length) {
+      parts.push(`Not saved yet: ${r.unsaved.map((u) => `${u.file} (${u.reason})`).join(", ")}.`);
+    }
+    return parts.join(" ");
+  }
+
+  async function removeSite(site: string) {
+    const u = siteUsage(taskStore, site);
+    if (u.rows) {
+      const ok = await confirmAction(
+        `Remove ${site}? ${u.rows} ${u.rows === 1 ? "task" : "tasks"} in ${u.files} ${u.files === 1 ? "file" : "files"} still use it and will show an error.`,
+        "Remove site",
+      );
+      if (!ok) return;
+    }
+    updateSites((sites ?? []).filter((s) => s !== site));
   }
 
   useShortcuts({
@@ -70,7 +176,7 @@ export default function App() {
     refresh: () => setListVersion((v) => v + 1),
     find: () => {
       setSettingsOpen(false);
-      setModuleId("profiles");
+      if (moduleId !== "tasks") setModuleId("profiles");
       setSelected(null);
       setFindRequest((n) => n + 1);
     },
@@ -87,23 +193,26 @@ export default function App() {
     return () => {
       unlisten.then((f) => f?.());
     };
-    // Registered once; everything it uses is stable (store, state setters).
+    // Registered once; everything it uses is stable (stores, state setters).
   }, []);
+
+  const allDirty = () => [...profileStore.dirtyEntries(), ...taskStore.dirtyEntries()];
 
   /** Saves every changed file without errors. True if nothing is left unsaved. */
   async function saveAll(): Promise<{ ok: boolean; summary: string }> {
     setSavingAll(true);
     setChangesMessage(null);
-    const r = await store.saveAll(confirmOverwrite);
+    const results = [await profileStore.saveAll(confirmOverwrite), await taskStore.saveAll(confirmOverwrite)];
     setSavingAll(false);
     setListVersion((v) => v + 1);
-    const problems = [
+    const saved = results.reduce((n, r) => n + r.saved.length, 0);
+    const problems = results.flatMap((r) => [
       ...r.invalid.map((e) => `${e.file.name}: has errors, fix them first`),
       ...r.failed.map((f) => `${f.entry.file.name}: ${f.error}`),
       ...r.cancelled.map((e) => `${e.file.name}: not overwritten`),
-    ];
-    const saved = `Saved ${r.saved.length} ${r.saved.length === 1 ? "file" : "files"}.`;
-    const summary = problems.length ? `${saved} Not saved:\n${problems.join("\n")}` : saved;
+    ]);
+    const savedText = `Saved ${saved} ${saved === 1 ? "file" : "files"}.`;
+    const summary = problems.length ? `${savedText} Not saved:\n${problems.join("\n")}` : savedText;
     setChangesMessage(summary);
     return { ok: problems.length === 0, summary };
   }
@@ -113,7 +222,7 @@ export default function App() {
    * Discard or Cancel. True if it's fine to go ahead.
    */
   async function resolveUnsaved(action: string): Promise<boolean> {
-    const dirty = store.dirtyEntries();
+    const dirty = allDirty();
     if (dirty.length === 0) return true;
     const list = dirty.map((e) => `  ${e.file.name}`).join("\n");
     const choice = await askSaveDiscardCancel(
@@ -122,7 +231,8 @@ export default function App() {
     );
     if (choice === "cancel") return false;
     if (choice === "discard") {
-      for (const e of dirty) store.discard(e.file.path);
+      for (const e of profileStore.dirtyEntries()) profileStore.discard(e.file.path);
+      for (const e of taskStore.dirtyEntries()) taskStore.discard(e.file.path);
       return true;
     }
     const { ok, summary } = await saveAll();
@@ -157,10 +267,10 @@ export default function App() {
   }
 
   function openChanged(path: string) {
-    const e = store.get(path);
-    if (!e) return;
-    setModuleId("profiles");
-    openFile(e.file);
+    const id = (["profiles", "tasks"] as const).find((m) => stores[m]!.get(path));
+    if (!id) return;
+    setModuleId(id);
+    openFile(stores[id]!.get(path)!.file);
   }
 
   if (root === undefined) return null;
@@ -177,7 +287,89 @@ export default function App() {
   }
 
   const mod = MODULES.find((m) => m.id === moduleId) ?? MODULES[0];
-  const isProfiles = mod.id === "profiles";
+  const dir = joinPath(root, mod.folder);
+  const list = folders[mod.id];
+  const store = stores[mod.id];
+  const changed = (["profiles", "tasks"] as const).flatMap((m) =>
+    stores[m]!.dirtyEntries().map((e) => ({
+      path: e.file.path,
+      name: e.file.name,
+      folder: folderOf(m),
+      invalid: e.errorCount > 0,
+    })),
+  );
+
+  let main;
+  if (settingsOpen) {
+    main = (
+      <SettingsPage
+        root={root}
+        onChangeFolder={chooseFolder}
+        bindings={bindings}
+        onChangeBindings={changeBindings}
+        onClose={() => setSettingsOpen(false)}
+      >
+        <SitesSettings
+          sites={sites ?? null}
+          usage={(s) => siteUsage(taskStore, s)}
+          onAdd={(s) => updateSites([...(sites ?? []), s])}
+          onRename={renameSite}
+          onRemove={removeSite}
+        />
+      </SettingsPage>
+    );
+  } else if (mod.id === "profiles") {
+    main = selected ? (
+      <ProfilesEditor
+        key={selected.path}
+        file={selected}
+        store={profileStore}
+        onSaved={() => setListVersion((v) => v + 1)}
+        groups={profileFiles ?? []}
+        onBack={() => setSelected(null)}
+        highlightId={highlight}
+      />
+    ) : (
+      <GroupsOverview
+        files={profileFiles}
+        dir={dir}
+        store={profileStore}
+        onOpen={openFile}
+        onFilesChanged={() => setListVersion((v) => v + 1)}
+        findRequest={findRequest}
+      />
+    );
+  } else if (mod.id === "tasks") {
+    main = selected ? (
+      <TableEditor
+        key={selected.path}
+        file={selected}
+        store={taskStore}
+        ui={taskUI}
+        confirmOverwrite={confirmOverwrite}
+        onSaved={() => setListVersion((v) => v + 1)}
+        files={taskFiles ?? []}
+        onBack={() => setSelected(null)}
+        highlightId={highlight}
+      />
+    ) : (
+      <TableOverview
+        files={taskFiles}
+        dir={dir}
+        store={taskStore}
+        ui={taskUI}
+        onOpen={openFile}
+        onFilesChanged={() => setListVersion((v) => v + 1)}
+        findRequest={findRequest}
+      />
+    );
+  } else {
+    main = selected ? (
+      <FilePanel key={selected.path} file={selected} onChanged={() => setListVersion((v) => v + 1)} />
+    ) : (
+      <p className="muted">Select a file.</p>
+    );
+  }
 
   return (
     <div className="app">
@@ -205,12 +397,7 @@ export default function App() {
           ))}
         </nav>
         <ChangesPanel
-          files={store.dirtyEntries().map((e) => ({
-            path: e.file.path,
-            name: e.file.name,
-            folder: PROFILES_FOLDER,
-            invalid: e.errorCount > 0,
-          }))}
+          files={changed}
           onOpen={openChanged}
           onSaveAll={() => void saveAll()}
           busy={savingAll}
@@ -218,22 +405,15 @@ export default function App() {
         />
       </aside>
       <FileList
-        key={`${root}|${mod.id}`}
-        dir={joinPath(root, mod.folder)}
+        dir={dir}
         extension={mod.extension}
+        files={list.files}
+        error={list.error}
         selectedPath={selected?.path ?? null}
         onSelect={(f) => openFile(f)}
-        version={listVersion}
-        onLoaded={
-          isProfiles
-            ? (files) => {
-                setProfileFiles(files);
-                void store.scan(files);
-              }
-            : undefined
-        }
+        onRefresh={() => setListVersion((v) => v + 1)}
         marker={
-          isProfiles
+          store
             ? (f) => {
                 const e = store.get(f.path);
                 if (!e) return store.loadError(f.path) ? { invalid: true } : undefined;
@@ -242,44 +422,7 @@ export default function App() {
             : undefined
         }
       />
-      <main className="main">
-        {settingsOpen ? (
-          <SettingsPage
-            root={root}
-            onChangeFolder={chooseFolder}
-            bindings={bindings}
-            onChangeBindings={changeBindings}
-            onClose={() => setSettingsOpen(false)}
-          />
-        ) : selected && isProfiles ? (
-          <ProfilesEditor
-            key={selected.path}
-            file={selected}
-            store={store}
-            onSaved={() => setListVersion((v) => v + 1)}
-            groups={profileFiles ?? []}
-            onBack={() => setSelected(null)}
-            highlightId={highlight}
-          />
-        ) : selected ? (
-          <FilePanel
-            key={selected.path}
-            file={selected}
-            onChanged={() => setListVersion((v) => v + 1)}
-          />
-        ) : isProfiles ? (
-          <GroupsOverview
-            files={profileFiles}
-            dir={joinPath(root, mod.folder)}
-            store={store}
-            onOpen={openFile}
-            onFilesChanged={() => setListVersion((v) => v + 1)}
-            findRequest={findRequest}
-          />
-        ) : (
-          <p className="muted">Select a file.</p>
-        )}
-      </main>
+      <main className="main">{main}</main>
     </div>
   );
 }

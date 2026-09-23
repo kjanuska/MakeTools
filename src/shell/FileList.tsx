@@ -1,16 +1,15 @@
-import { useEffect, useState } from "react";
 import { formatSize } from "../lib/format";
-import { listFiles, type FileEntry } from "../lib/fs";
+import type { FileEntry } from "../lib/fs";
 
 interface Props {
   dir: string;
   extension: string;
+  /** Null while loading or if the folder couldn't be listed. */
+  files: FileEntry[] | null;
+  error: string | null;
   selectedPath: string | null;
   onSelect: (file: FileEntry) => void;
-  /** Bump to reload the list. */
-  version: number;
-  /** Called with the files each time the list loads. */
-  onLoaded?: (files: FileEntry[]) => void;
+  onRefresh: () => void;
   /** Per-file state shown in the list. */
   marker?: (file: FileEntry) => FileMarker | undefined;
 }
@@ -22,38 +21,14 @@ export interface FileMarker {
   invalid?: boolean;
 }
 
-export function FileList({ dir, extension, selectedPath, onSelect, version, onLoaded, marker }: Props) {
-  const [files, setFiles] = useState<FileEntry[] | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [reloads, setReloads] = useState(0);
-
-  useEffect(() => {
-    let cancelled = false;
-    setError(null);
-    listFiles(dir, extension)
-      .then((f) => {
-        if (cancelled) return;
-        setFiles(f);
-        onLoaded?.(f);
-      })
-      .catch((e) => {
-        if (cancelled) return;
-        setFiles(null);
-        setError(String(e));
-      });
-    return () => {
-      cancelled = true;
-    };
-    // onLoaded is deliberately not a dependency: it shouldn't trigger reloads.
-  }, [dir, extension, version, reloads]);
-
+export function FileList({ dir, extension, files, error, selectedPath, onSelect, onRefresh, marker }: Props) {
   return (
     <section className="file-list" aria-label="Files">
       <div className="file-list-head">
         <span className="muted" title={dir}>
           *.{extension}
         </span>
-        <button onClick={() => setReloads((r) => r + 1)}>Refresh</button>
+        <button onClick={onRefresh}>Refresh</button>
       </div>
       {error && (
         <p className="error">

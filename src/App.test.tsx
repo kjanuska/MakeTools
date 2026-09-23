@@ -13,6 +13,8 @@ vi.mock("./lib/settings", () => ({
   setMakebotPath: vi.fn(),
   getShortcutOverrides: vi.fn(async () => ({})),
   setShortcutOverrides: vi.fn(async () => {}),
+  getSites: vi.fn(async () => ["kith.com"]),
+  setSites: vi.fn(async () => {}),
 }));
 vi.mock("./lib/dialogs", () => ({ pickFolder: vi.fn(), confirmAction: vi.fn(), askSaveDiscardCancel: vi.fn(), showMessage: vi.fn() }));
 vi.mock("./lib/window", () => ({ guardWindowClose: vi.fn() }));
@@ -78,7 +80,13 @@ describe("folder selection", () => {
     expect(await screen.findByText(ROOT)).toBeTruthy();
     expect(setMakebotPath).toHaveBeenCalledWith(ROOT);
     await screen.findByRole("button", { name: /popmart\.txt/ });
-    expect(callsOf(calls, "list_files")).toEqual([{ dir: `${ROOT}\\account`, extension: "txt" }]);
+    // Every module's folder is listed (tasks need the others to check their links).
+    expect(callsOf(calls, "list_files")).toEqual([
+      { dir: `${ROOT}\\account`, extension: "txt" },
+      { dir: `${ROOT}\\profile`, extension: "csv" },
+      { dir: `${ROOT}\\proxy`, extension: "txt" },
+      { dir: `${ROOT}\\task`, extension: "csv" },
+    ]);
   });
 
   it("stays on the welcome screen when the picker is cancelled", async () => {
@@ -144,17 +152,19 @@ describe("modules and file list", () => {
     await screen.findByRole("button", { name: /303\.csv/ });
     expect(screen.queryByRole("button", { name: /popmart\.txt/ })).toBeNull();
     expect(screen.getByRole("button", { name: "Tasks" }).getAttribute("aria-current")).toBe("page");
+    // All folders are listed once, up front; switching modules doesn't list again.
     expect(callsOf(calls, "list_files")).toEqual([
       { dir: `${ROOT}\\account`, extension: "txt" },
+      { dir: `${ROOT}\\profile`, extension: "csv" },
+      { dir: `${ROOT}\\proxy`, extension: "txt" },
       { dir: `${ROOT}\\task`, extension: "csv" },
     ]);
 
     fireEvent.click(screen.getByRole("button", { name: "Profiles" }));
     expect(await screen.findByText("No .csv files.")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Proxies" }));
-    await waitFor(() =>
-      expect(callsOf(calls, "list_files")).toContainEqual({ dir: `${ROOT}\\proxy`, extension: "txt" }),
-    );
+    expect(await screen.findByText("No .txt files.")).toBeTruthy();
+    expect(callsOf(calls, "list_files")).toHaveLength(4);
   });
 
   it("shows an error when a module folder is missing", async () => {
@@ -171,8 +181,9 @@ describe("modules and file list", () => {
     const calls = backend();
     render(<App />);
     await screen.findByRole("button", { name: /popmart\.txt/ });
+    await waitFor(() => expect(callsOf(calls, "list_files")).toHaveLength(4));
     fireEvent.click(screen.getByRole("button", { name: "Refresh" }));
-    await waitFor(() => expect(callsOf(calls, "list_files")).toHaveLength(2));
+    await waitFor(() => expect(callsOf(calls, "list_files")).toHaveLength(8));
   });
 
   it("clears the selected file when switching modules", async () => {
@@ -180,7 +191,7 @@ describe("modules and file list", () => {
     render(<App />);
     await openAccountFile();
     expect(await screen.findByRole("heading", { name: "popmart.txt" })).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: "Tasks" }));
+    fireEvent.click(screen.getByRole("button", { name: "Proxies" }));
     expect(await screen.findByText("Select a file.")).toBeTruthy();
   });
 });
@@ -195,7 +206,8 @@ describe("file panel", () => {
     expect(screen.getByText("22 B")).toBeTruthy();
     expect(screen.getByText("No")).toBeTruthy();
     expect(screen.queryByText(/secret-password/)).toBeNull();
-    expect(callsOf(calls, "read_text")).toEqual([{ path: ACCOUNT_FILE.path }]);
+    // The account file is read once (task files are also read, to check them).
+    expect(callsOf(calls, "read_text").filter((a) => a.path === ACCOUNT_FILE.path)).toEqual([{ path: ACCOUNT_FILE.path }]);
   });
 
   it("shows BOM and mixed line endings", async () => {
@@ -254,8 +266,8 @@ describe("backups", () => {
     expect(callsOf(calls, "restore_backup")).toEqual([{ path: ACCOUNT_FILE.path, id: BACKUPS[1].id }]);
     await waitFor(() => {
       expect(callsOf(calls, "list_backups")).toHaveLength(2);
-      expect(callsOf(calls, "read_text")).toHaveLength(2);
-      expect(callsOf(calls, "list_files")).toHaveLength(2);
+      expect(callsOf(calls, "read_text").filter((a) => a.path === ACCOUNT_FILE.path)).toHaveLength(2);
+      expect(callsOf(calls, "list_files")).toHaveLength(8);
     });
   });
 

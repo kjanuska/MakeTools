@@ -13,6 +13,8 @@ vi.mock("../../lib/settings", () => ({
   setMakebotPath: vi.fn(),
   getShortcutOverrides: vi.fn(async () => ({})),
   setShortcutOverrides: vi.fn(async () => {}),
+  getSites: vi.fn(async () => ["kith.com"]),
+  setSites: vi.fn(async () => {}),
 }));
 vi.mock("../../lib/dialogs", () => ({
   pickFolder: vi.fn(),
@@ -276,7 +278,8 @@ describe("keyboard shortcuts in a group", () => {
     await open();
     const before = callsOf("list_files").length;
     expect(press("F5")).toBe(false);
-    await waitFor(() => expect(callsOf("list_files").length).toBe(before + 1));
+    // One listing per module folder.
+    await waitFor(() => expect(callsOf("list_files").length).toBe(before + 4));
     expect(press("r", { ctrlKey: true })).toBe(false);
   });
 });

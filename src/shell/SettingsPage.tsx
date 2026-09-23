@@ -1,4 +1,4 @@
-import { useEffect, useState, type KeyboardEvent } from "react";
+import { useEffect, useState, type KeyboardEvent, type ReactNode } from "react";
 import {
   ACTIONS,
   DEFAULT_BINDINGS,
@@ -15,9 +15,11 @@ interface Props {
   bindings: Bindings;
   onChangeBindings: (bindings: Bindings) => void;
   onClose: () => void;
+  /** Extra sections from modules (e.g. the task site list). */
+  children?: ReactNode;
 }
 
-export function SettingsPage({ root, onChangeFolder, bindings, onChangeBindings, onClose }: Props) {
+export function SettingsPage({ root, onChangeFolder, bindings, onChangeBindings, onClose, children }: Props) {
   const [recording, setRecording] = useState<ActionId | null>(null);
   const [note, setNote] = useState<string | null>(null);
 
@@ -75,6 +77,8 @@ export function SettingsPage({ root, onChangeFolder, bindings, onChangeBindings,
         <p className="path">{root}</p>
         <button onClick={onChangeFolder}>Change folder…</button>
       </section>
+
+      {children}
 
       <section aria-label="Keyboard shortcuts">
         <h3>Keyboard shortcuts</h3>

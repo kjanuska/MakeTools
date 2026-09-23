@@ -13,6 +13,8 @@ vi.mock("../../lib/settings", () => ({
   setMakebotPath: vi.fn(),
   getShortcutOverrides: vi.fn(async () => ({})),
   setShortcutOverrides: vi.fn(async () => {}),
+  getSites: vi.fn(async () => ["kith.com"]),
+  setSites: vi.fn(async () => {}),
 }));
 vi.mock("../../lib/dialogs", () => ({
   pickFolder: vi.fn(),
