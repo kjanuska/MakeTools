@@ -614,3 +614,144 @@ button.link {
   border-color: var(--accent);
   color: var(--accent);
 }
+
+/* Task cells */
+
+:root {
+  --random: #7c3aed;
+  --random-bg: #ede9fe;
+  --neg: #b91c1c;
+  --neg-bg: #fee2e2;
+  --chip-bg: #e5e7eb;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --random: #c4b5fd;
+    --random-bg: #2e2447;
+    --neg: #fca5a5;
+    --neg-bg: #3f1d1d;
+    --chip-bg: #374151;
+  }
+}
+
+/* "random" in size/color: a dice mark and purple text, so random vs a real value is obvious. */
+.grid td.random {
+  position: relative;
+  background: var(--random-bg);
+}
+
+.grid td.random::before {
+  content: "🎲";
+  position: absolute;
+  left: 4px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 11px;
+  pointer-events: none;
+}
+
+.grid .cell.is-random,
+.panel-input.is-random {
+  color: var(--random);
+  font-style: italic;
+  padding-left: 20px;
+}
+
+.grid .cell[type="number"] {
+  text-align: right;
+}
+
+.grid .cell-input,
+.grid .cell-site {
+  width: 190px;
+  min-width: 190px;
+}
+
+.grid .cell-cartQuantity,
+.grid .cell-delay,
+.grid .cell-profileName {
+  width: 90px;
+  min-width: 90px;
+}
+
+.grid .cell-mode {
+  width: 170px;
+  min-width: 170px;
+}
+
+.chip,
+.kw {
+  display: inline-block;
+  padding: 0 6px;
+  margin: 1px 2px 1px 0;
+  border-radius: 9px;
+  background: var(--chip-bg);
+  font-size: 12px;
+  line-height: 18px;
+  white-space: nowrap;
+}
+
+.chip.unknown,
+.kw-neg {
+  background: var(--neg-bg);
+  color: var(--neg);
+}
+
+.parts-cell {
+  position: relative;
+}
+
+.grid .parts-button {
+  text-align: left;
+  white-space: nowrap;
+  overflow: hidden;
+  cursor: pointer;
+}
+
+.parts-editor {
+  position: absolute;
+  z-index: 5;
+  top: 100%;
+  left: 0;
+  min-width: 240px;
+  padding: 8px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  box-shadow: 0 6px 20px rgb(0 0 0 / 0.18);
+}
+
+.parts-editor ol {
+  margin: 0 0 8px;
+  padding-left: 20px;
+}
+
+.parts-editor li {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-bottom: 2px;
+}
+
+.parts-editor li button {
+  padding: 0 6px;
+}
+
+.parts-editor select {
+  margin-right: 6px;
+}
+
+.grid .extra-td {
+  padding: 2px 6px;
+  color: var(--muted);
+  background: var(--panel);
+}
+
+.grid .parsed-td {
+  min-width: 160px;
+}
+
+.grid .extra-td.num {
+  text-align: right;
+}

@@ -96,6 +96,34 @@ The same as profiles, per task file:
 ## Code plan
 Profiles and tasks are both unquoted CSVs with a fixed header. The CSV parser, the store, the grid and its panels, and the overview are generalised into shared code now that a second module needs it. The profiles module then configures them. The profiles tests stay as they are and must keep passing unchanged, which shows the refactor didn't change any behavior.
 
+## Build notes (3a, 2026-09-23)
+- **Shared code:**
+  - `src/lib/formats/csvTable.ts`: parse/serialize for both modules.
+  - `src/lib/table/`: schema, edit operations, store, file operations and file-name rules.
+  - `src/components/table/`: editor, overview, cells and backups menu.
+  - Profiles and tasks only add config: `modules/<module>/schema.ts` and `ui.tsx`.
+  - During the refactor, the only change to the profiles tests was renaming the row kind "profile" to "record".
+- **Tasks code:**
+  - Format and automatic fixes in `src/lib/formats/tasks.ts`.
+  - Rules, the mode parts list and input parsing in `src/lib/rules/tasks.ts`.
+  - Link checks and task counts in `src/modules/tasks/schema.ts`.
+  - UI config in `ui.tsx`, the site list logic in `sites.ts`, and the validation context in `context.ts`.
+- **All folders are listed up front** (profile, task, proxy, account), and every profile and task file is loaded, so links, counts and red file marks are known right away.
+- **Validation context:** profile groups with their names (including unsaved profile edits), proxy and account groups, and the site list. Existence checks wait until all of these have loaded, so no errors flash up while loading.
+- **New task rows:**
+  - `size` and `color` start as `random`, `cartQuantity` as `1` and `delay` as `3000`, the most common values in the current files. Everything else starts empty.
+  - The cursor goes to `profileGroup`.
+- **Templates and duplicates** copy task rows exactly, since tasks have no names.
+- **"Add site…"** opens a small "New site" field above the grid. The site is added to the global list (and saved) and put in the cell.
+- **Mode editor:** clicking a mode cell opens a popover. It lists the parts in order, with ← → × buttons and an "Add part…" dropdown.
+- **Parsed column:** shows positive keywords and red "−negative" keywords. While an input is being edited it keeps the old view, and it updates when you leave the cell. That's also when the spaces are cleaned up.
+- **Tasks column and counts:** `?` means the count isn't known (an unknown group). Totals show that as "(+N unknown)".
+- **Site rename:** the new site list is applied to the task checks before files are saved, so renamed tasks are valid when they're saved. A file that can't be saved (e.g. it has other errors) keeps the rename as unsaved changes, and the result message lists it.
+- **Real-file tests:**
+  - All 78 current task files round-trip byte for byte.
+  - After the automatic fixes, every row parses, including `drift.csv`.
+  - The fixes change nothing but spaces, quotes and line breaks.
+
 ## Later (3b and beyond)
 - Batch operations and views (the user will describe them).
 - **Offer to update tasks** when a profile group is renamed or a profileName changes. Later, the same for proxy and account groups. (The user agreed on 2026-09-23.)

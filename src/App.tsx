@@ -111,7 +111,6 @@ export default function App() {
   const taskContext = useMemo(
     () => buildTaskContext(folders.profiles, folders.proxies, folders.accounts, profileStore, sites),
     // profileVersion: profile edits change the profile names tasks can use.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
     [folders.profiles, folders.proxies, folders.accounts, profileStore, sites, profileVersion],
   );
   const lastContextKey = useRef("");
@@ -148,7 +147,10 @@ export default function App() {
       "Rename site",
     );
     if (!ok) return null;
-    updateSites((sites ?? []).map((s) => (s === from ? to : s)));
+    const next = (sites ?? []).map((s) => (s === from ? to : s));
+    updateSites(next);
+    // Check the renamed tasks against the new list right away, before saving them.
+    taskStore.setContext({ ...taskStore.getContext(), sites: next });
     const r = await renameSiteEverywhere(taskStore, from, to, confirmOverwrite);
     setListVersion((v) => v + 1);
     const parts = [`Renamed ${from} to ${to}. Saved ${r.saved.length} ${r.saved.length === 1 ? "file" : "files"}.`];
