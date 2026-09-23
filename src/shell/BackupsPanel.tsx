@@ -6,11 +6,9 @@ import { listBackups, restoreBackup, type BackupEntry, type FileEntry } from "..
 interface Props {
   file: FileEntry;
   onRestored: () => void;
-  /** When set, restoring is disabled and this reason is shown. */
-  restoreDisabledReason?: string;
 }
 
-export function BackupsPanel({ file, onRestored, restoreDisabledReason }: Props) {
+export function BackupsPanel({ file, onRestored }: Props) {
   const [backups, setBackups] = useState<BackupEntry[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [status, setStatus] = useState<string | null>(null);
@@ -52,7 +50,6 @@ export function BackupsPanel({ file, onRestored, restoreDisabledReason }: Props)
       <p className="muted">
         A backup is made on every save. Backups older than 7 days are deleted automatically.
       </p>
-      {restoreDisabledReason && <p className="muted">{restoreDisabledReason}</p>}
       {status && <p className="status">{status}</p>}
       {error && <p className="error">{error}</p>}
       {backups && backups.length === 0 && <p className="muted">No backups for this file yet.</p>}
@@ -71,7 +68,7 @@ export function BackupsPanel({ file, onRestored, restoreDisabledReason }: Props)
                 <td>{formatDateTime(b.createdMs)}</td>
                 <td>{formatSize(b.size)}</td>
                 <td>
-                  <button disabled={busy || !!restoreDisabledReason} onClick={() => restore(b)}>
+                  <button disabled={busy} onClick={() => restore(b)}>
                     Restore
                   </button>
                 </td>

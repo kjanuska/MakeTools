@@ -8,7 +8,12 @@ import type { FileEntry } from "../../lib/fs";
 import { getMakebotPath } from "../../lib/settings";
 import { guardWindowClose } from "../../lib/window";
 
-vi.mock("../../lib/settings", () => ({ getMakebotPath: vi.fn(), setMakebotPath: vi.fn() }));
+vi.mock("../../lib/settings", () => ({
+  getMakebotPath: vi.fn(),
+  setMakebotPath: vi.fn(),
+  getShortcutOverrides: vi.fn(async () => ({})),
+  setShortcutOverrides: vi.fn(async () => {}),
+}));
 vi.mock("../../lib/dialogs", () => ({
   pickFolder: vi.fn(),
   confirmAction: vi.fn(),

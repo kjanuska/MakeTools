@@ -130,6 +130,28 @@ Details settled while building. Each is small, and the user can change any of th
 - **Safety:** `create_file` never overwrites an existing file, and `rename_file` refuses to replace another file. Delete and rename back up the file first under its old path. To get a deleted group back, create a group with the same name and restore it from Backups.
 - **Move / copy to group** (editor panel): the selected profiles are added to the end of another editable group with their names kept. Any name clash blocks the whole action. Both groups are left with unsaved changes until saved.
 - Reloading a file that hasn't changed on disk keeps its rows as they are, so selections survive list refreshes.
+## Build notes (2b feedback, 2026-09-23)
+- **Changed cells:**
+  - An edited cell gets a tinted background and a corner mark, and hovering it shows "Was: <old value>". An empty old value shows as "(empty)". A validation error, if any, is listed first.
+  - New rows are tinted green, and their row number says "New row (not saved yet)".
+  - The marks clear on save or discard, and they stay while you switch between files.
+  - Each file keeps its as-loaded rows (the store's `base` and `original`), and edits keep row ids, so every cell can be compared with its saved value.
+- **Row numbers:** clicking the only selected row deselects it.
+- **Shortcuts:** every action is listed in `src/lib/shortcuts.ts` with a default, and all of them can be changed on the Settings page. The defaults:
+  - Saving: Save `Ctrl+S`, Save all `Ctrl+Shift+S`, Discard (none).
+  - Selection: Select all rows `Ctrl+A`, Clear selection `Escape`.
+  - Rows: Add row `Ctrl+N` (puts the cursor in the new row), Duplicate `Ctrl+D`, Delete rows `Ctrl+Delete`, Move up/down `Alt+↑/↓`.
+  - Panels: Bulk edit `Ctrl+B`, From template `Ctrl+T`, Paste rows `Ctrl+Shift+V`, Move/copy `Ctrl+M`, Backups `Ctrl+H`.
+  - Navigation: Back to all groups `Alt+←`, Find a profile `Ctrl+F`, Refresh file list `F5`, Settings `Ctrl+,`.
+  - In a text box outside the grid (paste box, search, bulk value), only the save, panel and navigation shortcuts work, so Ctrl+A and similar keys still act on the text.
+  - A shortcut must use Ctrl or Alt, except F1–F12 and Escape.
+  - Giving one action another action's keys removes them from the other action, with a note.
+  - Page-reload keys (`F5`, `Ctrl+R`, `Ctrl+Shift+R`) are always blocked, so unsaved changes can't be lost by accident.
+  - Changes to shortcuts are saved in settings.json as differences from the defaults.
+- **Settings page** (the ⚙ Settings button in the top right, or `Ctrl+,`): shows the Makebot folder with **Change folder…**, and the shortcut editor. The top bar no longer has a Change folder button.
+- **Backups:** the backups panel under the grid is gone. Each group has a **Backups ▾** button in the top right, which opens a dropdown of its backups with Restore buttons.
+- **Staged restore:** Restore reads the backup (Rust `read_backup`) and loads it as unsaved changes. The file on disk isn't touched until Save, and Discard changes undoes the restore. Rows are matched by position, so changed cells show what they were. If there are unsaved edits, the app asks first. A backup without the profile header is refused.
+
 - Code: overview in `src/modules/profiles/GroupsOverview.tsx`, file operations in `groups.ts` and name rules in `groupNames.ts`.
 
 - Code: format in `src/lib/formats/profiles.ts`, rules engine and config in `src/lib/rules/`, edit operations in `src/modules/profiles/ops.ts`, open files and unsaved edits in `src/modules/profiles/store.ts`, UI in `src/modules/profiles/ProfilesEditor.tsx`, and the sidebar list in `src/shell/ChangesPanel.tsx`.

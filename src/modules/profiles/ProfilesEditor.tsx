@@ -1,11 +1,13 @@
 import { memo, useCallback, useEffect, useRef, useState, type KeyboardEvent, type MouseEvent } from "react";
 import { confirmAction } from "../../lib/dialogs";
+import { formatDateTime } from "../../lib/format";
 import { LINE_ENDING_LABELS } from "../../lib/format";
 import { PROFILE_FIELDS, type ProfileField, type ProfileRow, type Row } from "../../lib/formats/profiles";
-import type { FileEntry } from "../../lib/fs";
+import { readBackup, type BackupEntry, type FileEntry } from "../../lib/fs";
 import { optionsOf } from "../../lib/rules/engine";
 import { PROFILE_RULES } from "../../lib/rules/profiles";
-import { BackupsPanel } from "../../shell/BackupsPanel";
+import { useShortcutsRef, type ActionId } from "../../lib/shortcuts";
+import { BackupsMenu } from "./BackupsMenu";
 import {
   addRow,
   bulkSet,
@@ -54,9 +56,14 @@ export function ProfilesEditor({ file, store, onSaved, groups, onBack, highlight
   const [error, setError] = useState<string | null>(null);
   const [status, setStatus] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
-  const [backupsVersion, setBackupsVersion] = useState(0);
+  const [backupsOpen, setBackupsOpen] = useState(false);
+  const rootRef = useRef<HTMLDivElement>(null);
   const gridRef = useRef<HTMLTableElement>(null);
   const highlighted = useRef(false);
+  /** Row index whose first editable cell gets focus after the next render (Add row). */
+  const focusRow = useRef<number | null>(null);
+  const shortcutHandlers = useRef<Partial<Record<ActionId, () => void>>>({});
+  useShortcutsRef(shortcutHandlers);
 
   const entry = store.get(file.path);
   const loadError = store.loadError(file.path);
@@ -91,6 +98,15 @@ export function ProfilesEditor({ file, store, onSaved, groups, onBack, highlight
     input?.focus();
   }, [doc, highlightName]);
 
+  useEffect(() => {
+    if (focusRow.current === null) return;
+    const i = focusRow.current;
+    focusRow.current = null;
+    const input = gridRef.current?.querySelector<HTMLElement>(`[data-row="${i}"][data-col="1"]`);
+    input?.scrollIntoView?.({ block: "nearest" });
+    input?.focus();
+  }, [doc]);
+
   const edit = useCallback(
     (f: Parameters<ProfileStore["update"]>[1]) => {
       setStatus(null);
@@ -123,6 +139,7 @@ export function ProfilesEditor({ file, store, onSaved, groups, onBack, highlight
           else next.add(id);
           return { ids: next, anchor: id };
         }
+        if (s.ids.size === 1 && s.ids.has(id)) return EMPTY_SELECTION;
         return { ids: new Set([id]), anchor: id };
       });
     },
@@ -145,6 +162,7 @@ export function ProfilesEditor({ file, store, onSaved, groups, onBack, highlight
   }, []);
 
   if (!entry || !doc) {
+    shortcutHandlers.current = { back: onBack };
     return (
       <div className="file-panel">
         <h2>{file.name}</h2>
@@ -168,7 +186,6 @@ export function ProfilesEditor({ file, store, onSaved, groups, onBack, highlight
     const r = await store.save(file.path, confirmOverwrite);
     setSaving(false);
     if (r.ok) {
-      setBackupsVersion((v) => v + 1);
       onSaved();
       if (r.verified) setStatus("Saved. The previous version was backed up.");
       else setError("Saved, but the file on disk doesn't match what was written. Check it before using it.");
@@ -184,8 +201,59 @@ export function ProfilesEditor({ file, store, onSaved, groups, onBack, highlight
     setStatus(null);
   }
 
+  async function restore(b: BackupEntry) {
+    const when = formatDateTime(b.createdMs);
+    setError(null);
+    if (dirty) {
+      const ok = await confirmAction(
+        `Replace your unsaved changes to ${file.name} with the backup from ${when}?`,
+        "Restore backup",
+      );
+      if (!ok) return;
+    }
+    try {
+      const backup = await readBackup(file.path, b.id);
+      const r = store.stage(file.path, backup.text);
+      if (!r.ok) {
+        setError(r.error);
+        return;
+      }
+      setBackupsOpen(false);
+      setSelection(EMPTY_SELECTION);
+      setStatus(`Loaded the backup from ${when}. Save to keep it, or Discard changes to undo.`);
+    } catch (e) {
+      setError(`Couldn't read the backup: ${e}`);
+    }
+  }
+
+  const canSave = dirty && errorCount === 0 && !saving;
+  const hasSelection = selectedIds.length > 0;
+  const focusIn = (selector: string) => rootRef.current?.querySelector<HTMLElement>(selector)?.focus();
+  shortcutHandlers.current = readOnly
+    ? { back: onBack, backups: () => setBackupsOpen((o) => !o) }
+    : {
+        save: () => canSave && void save(),
+        discard: () => dirty && void discard(),
+        selectAll: () => setSelection({ ids: new Set(rowIds), anchor: rowIds[0] ?? null }),
+        clearSelection: () => setSelection(EMPTY_SELECTION),
+        addRow: () => {
+          focusRow.current = doc.rows.length;
+          edit(addRow);
+        },
+        duplicate: () => selectedProfiles.length > 0 && edit((d) => duplicateRows(d, selectedIds)),
+        deleteRows: () => hasSelection && edit((d) => deleteRows(d, selectedIds)),
+        moveUp: () => hasSelection && edit((d) => moveRows(d, selectedIds, -1)),
+        moveDown: () => hasSelection && edit((d) => moveRows(d, selectedIds, 1)),
+        bulkEdit: () => focusIn('[aria-label="New value"]'),
+        template: () => setPanel("template"),
+        paste: () => setPanel("import"),
+        transfer: () => setPanel("transfer"),
+        backups: () => setBackupsOpen((o) => !o),
+        back: onBack,
+      };
+
   return (
-    <div className="profiles-editor">
+    <div className="profiles-editor" ref={rootRef}>
       <div className="editor-head">
         <button onClick={onBack}>← All groups</button>
         <h2>{file.name}</h2>
@@ -196,6 +264,8 @@ export function ProfilesEditor({ file, store, onSaved, groups, onBack, highlight
           {LINE_ENDING_LABELS[loaded.lineEnding]}
           {loaded.hasBom && " · BOM"}
         </span>
+        <span className="spacer" />
+        <BackupsMenu file={file} open={backupsOpen} onToggle={() => setBackupsOpen((o) => !o)} onRestore={restore} />
       </div>
 
       {error && <p className="error">{error}</p>}
@@ -207,14 +277,14 @@ export function ProfilesEditor({ file, store, onSaved, groups, onBack, highlight
       ) : (
         <>
           <div className="toolbar" role="toolbar" aria-label="Profile actions">
-            <button className="primary" disabled={!dirty || errorCount > 0 || saving} onClick={save}>
+            <button className="primary" disabled={!canSave} onClick={save}>
               {saving ? "Saving…" : "Save"}
             </button>
             <button disabled={!dirty || saving} onClick={discard}>
               Discard changes
             </button>
             <span className="toolbar-sep" />
-            <button onClick={() => edit(addRow)}>Add row</button>
+            <button onClick={shortcutHandlers.current.addRow}>Add row</button>
             <button disabled={selectedProfiles.length === 0} onClick={() => edit((d) => duplicateRows(d, selectedIds))}>
               Duplicate
             </button>
@@ -325,6 +395,7 @@ export function ProfilesEditor({ file, store, onSaved, groups, onBack, highlight
                 row={r}
                 index={i}
                 errors={errors.get(r.id)}
+                original={entry.original.get(r.id)}
                 selected={selection.ids.has(r.id)}
                 readOnly={readOnly}
                 onCell={onCell}
@@ -338,16 +409,6 @@ export function ProfilesEditor({ file, store, onSaved, groups, onBack, highlight
       </div>
 
       {!readOnly && errorCount > 0 && <ErrorList rows={doc.rows} errors={errors} />}
-
-      <BackupsPanel
-        key={backupsVersion}
-        file={file}
-        restoreDisabledReason={dirty ? "Save or discard your changes before restoring a backup." : undefined}
-        onRestored={() => {
-          void store.load(file, true);
-          onSaved();
-        }}
-      />
     </div>
   );
 }
@@ -356,6 +417,8 @@ interface GridRowProps {
   row: Row;
   index: number;
   errors: RowErrors | undefined;
+  /** Saved values of this row; undefined for a new row. */
+  original: readonly string[] | undefined;
   selected: boolean;
   readOnly: boolean;
   onCell: (id: number, field: ProfileField, value: string) => void;
@@ -367,14 +430,17 @@ const sameErrors = (a: RowErrors | undefined, b: RowErrors | undefined) =>
   a === b || JSON.stringify(a ?? {}) === JSON.stringify(b ?? {});
 
 const GridRow = memo(
-  function GridRow({ row, index, errors, selected, readOnly, onCell, onRowHead, onCellKey }: GridRowProps) {
+  function GridRow({ row, index, errors, original, selected, readOnly, onCell, onRowHead, onCellKey }: GridRowProps) {
     const number = index + 1;
+    const isNew = row.kind === "profile" && !original;
+    const classes = [selected && "selected", isNew && "new-row"].filter(Boolean).join(" ");
     return (
-      <tr className={selected ? "selected" : undefined} aria-selected={selected}>
+      <tr className={classes || undefined} aria-selected={selected}>
         <th
           scope="row"
           className="row-head"
           aria-label={`Row ${number}`}
+          title={isNew ? "New row (not saved yet)" : undefined}
           onMouseDown={(e) => {
             if (e.shiftKey) e.preventDefault(); // don't select text on shift-click
           }}
@@ -390,12 +456,17 @@ const GridRow = memo(
         ) : (
           PROFILE_FIELDS.map((f, col) => {
             const error = errors?.[f];
+            const was = original && original[col] !== row.values[col] ? original[col] : undefined;
             return (
-              <td key={f} className={`cell-td cell-${f}${error ? " invalid" : ""}`}>
+              <td
+                key={f}
+                className={`cell-td cell-${f}${error ? " invalid" : ""}${was !== undefined ? " changed" : ""}`}
+              >
                 <Cell
                   field={f}
                   value={row.values[col]}
                   error={error}
+                  was={was}
                   label={`Row ${number} ${f}`}
                   disabled={readOnly}
                   dataRow={index}
@@ -413,6 +484,7 @@ const GridRow = memo(
   (a, b) =>
     a.row === b.row &&
     a.index === b.index &&
+    a.original === b.original &&
     a.selected === b.selected &&
     a.readOnly === b.readOnly &&
     a.onCell === b.onCell &&
@@ -425,6 +497,8 @@ interface CellProps {
   field: ProfileField;
   value: string;
   error?: string;
+  /** Saved value, when this cell was changed. */
+  was?: string;
   label: string;
   disabled?: boolean;
   dataRow?: number;
@@ -434,12 +508,13 @@ interface CellProps {
   onKeyDown?: (e: KeyboardEvent<HTMLElement>) => void;
 }
 
-function Cell({ field, value, error, label, disabled, dataRow, dataCol, className, onChange, onKeyDown }: CellProps) {
+function Cell({ field, value, error, was, label, disabled, dataRow, dataCol, className, onChange, onKeyDown }: CellProps) {
   const options = optionsOf(PROFILE_RULES[field]);
+  const tips = [error && `${field} ${error}`, was !== undefined && `Was: ${was === "" ? "(empty)" : was}`].filter(Boolean);
   const common = {
     "aria-label": label,
     "aria-invalid": error ? true : undefined,
-    title: error ? `${field} ${error}` : undefined,
+    title: tips.length ? tips.join("\n") : undefined,
     className: className ?? "cell",
     disabled,
     "data-row": dataRow,
@@ -537,7 +612,7 @@ function TemplatePanel({
       )}
       <label>
         How many{" "}
-        <input className="count" value={count} inputMode="numeric" onChange={(e) => setCount(e.target.value)} />
+        <input autoFocus className="count" value={count} inputMode="numeric" onChange={(e) => setCount(e.target.value)} />
       </label>
       <button disabled={!template || !valid} onClick={() => onCreate(n)}>
         Create {valid ? n : ""} {n === 1 ? "row" : "rows"}
@@ -553,6 +628,7 @@ function ImportPanel({ onImport }: { onImport: (rows: string[][]) => void }) {
   return (
     <section className="action-panel import" aria-label="Paste rows">
       <textarea
+        autoFocus
         aria-label="Rows to paste"
         placeholder="One profile per line, 15 comma-separated values (same as the file). A header line is skipped."
         value={text}
@@ -606,7 +682,7 @@ function TransferPanel({
     <section className="action-panel" aria-label="Move or copy to group">
       <label>
         To group{" "}
-        <select value={targetPath} onChange={(e) => setTargetPath(e.target.value)}>
+        <select autoFocus value={targetPath} onChange={(e) => setTargetPath(e.target.value)}>
           <option value="">Choose…</option>
           {groups.map((g) => (
             <option key={g.path} value={g.path}>

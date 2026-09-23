@@ -510,3 +510,107 @@ button.link {
 .editor-head button {
   align-self: center;
 }
+
+/* Unsaved changes in the grid */
+
+:root {
+  --changed: #b45309;
+  --changed-bg: #fef3c7;
+  --new-bg: #dcfce7;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --changed: #fbbf24;
+    --changed-bg: #3b2f14;
+    --new-bg: #173323;
+  }
+}
+
+.grid td.changed {
+  background: var(--changed-bg);
+  position: relative;
+}
+
+/* Corner mark on a changed cell, like a spreadsheet note. */
+.grid td.changed::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  right: 0;
+  border-top: 7px solid var(--changed);
+  border-left: 7px solid transparent;
+  pointer-events: none;
+}
+
+.grid tr.new-row td {
+  background: var(--new-bg);
+}
+
+.grid tr.new-row .row-head {
+  box-shadow: inset 3px 0 0 var(--ok);
+}
+
+.grid td.invalid.changed {
+  background: color-mix(in srgb, var(--error) 18%, var(--bg));
+}
+
+/* Editor header and backups dropdown */
+
+.spacer {
+  flex: 1;
+}
+
+.editor-head {
+  position: relative;
+}
+
+.backups-menu {
+  position: relative;
+}
+
+.backups-dropdown {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 4px);
+  z-index: 10;
+  width: 360px;
+  max-height: 60vh;
+  overflow-y: auto;
+  padding: 10px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  box-shadow: 0 6px 20px rgb(0 0 0 / 0.18);
+}
+
+.backups-dropdown p {
+  margin: 0 0 8px;
+}
+
+.backups-dropdown table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.backups-dropdown td {
+  padding: 3px 6px 3px 0;
+  border-bottom: 1px solid var(--border);
+}
+
+/* Settings */
+
+.settings section {
+  margin-bottom: 24px;
+}
+
+.key-button {
+  min-width: 140px;
+  font-family: Consolas, monospace;
+  text-align: left;
+}
+
+.key-button.recording {
+  border-color: var(--accent);
+  color: var(--accent);
+}

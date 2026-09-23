@@ -1,10 +1,18 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import "./App.css";
 import { askSaveDiscardCancel, pickFolder, showMessage } from "./lib/dialogs";
 import type { FileEntry } from "./lib/fs";
 import { MODULES, type ModuleId } from "./lib/modules";
 import { joinPath } from "./lib/paths";
-import { getMakebotPath, setMakebotPath } from "./lib/settings";
+import { getMakebotPath, getShortcutOverrides, setMakebotPath, setShortcutOverrides } from "./lib/settings";
+import {
+  DEFAULT_BINDINGS,
+  handleShortcutKey,
+  overridesFor,
+  resolveBindings,
+  useShortcuts,
+  type Bindings,
+} from "./lib/shortcuts";
 import { guardWindowClose } from "./lib/window";
 import { GroupsOverview } from "./modules/profiles/GroupsOverview";
 import { ProfilesEditor } from "./modules/profiles/ProfilesEditor";
@@ -13,6 +21,7 @@ import { ProfileStore, useStoreVersion } from "./modules/profiles/store";
 import { ChangesPanel } from "./shell/ChangesPanel";
 import { FileList } from "./shell/FileList";
 import { FilePanel } from "./shell/FilePanel";
+import { SettingsPage } from "./shell/SettingsPage";
 
 const PROFILES_FOLDER = MODULES.find((m) => m.id === "profiles")!.folder;
 
@@ -30,7 +39,42 @@ export default function App() {
   const [profileFiles, setProfileFiles] = useState<FileEntry[] | null>(null);
   // profileName to jump to when a file is opened from the overview search.
   const [highlight, setHighlight] = useState<string | undefined>(undefined);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [bindings, setBindings] = useState<Bindings>(DEFAULT_BINDINGS);
+  const bindingsRef = useRef(bindings);
+  bindingsRef.current = bindings;
+  // Bumped to focus the overview's search box.
+  const [findRequest, setFindRequest] = useState(0);
   useStoreVersion(store);
+
+  useEffect(() => {
+    getShortcutOverrides()
+      .then((o) => setBindings(resolveBindings(o)))
+      .catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => handleShortcutKey(e, bindingsRef.current);
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
+
+  function changeBindings(next: Bindings) {
+    setBindings(next);
+    setShortcutOverrides(overridesFor(next)).catch((e) => setError(`Couldn't save shortcuts: ${e}`));
+  }
+
+  useShortcuts({
+    saveAll: () => void saveAll(),
+    settings: () => setSettingsOpen((o) => !o),
+    refresh: () => setListVersion((v) => v + 1),
+    find: () => {
+      setSettingsOpen(false);
+      setModuleId("profiles");
+      setSelected(null);
+      setFindRequest((n) => n + 1);
+    },
+  });
 
   useEffect(() => {
     getMakebotPath()
@@ -101,11 +145,13 @@ export default function App() {
 
   /** Clicking the current module again goes back to its overview. */
   function selectModule(id: ModuleId) {
+    setSettingsOpen(false);
     setModuleId(id);
     setSelected(null);
   }
 
   function openFile(file: FileEntry, highlightName?: string) {
+    setSettingsOpen(false);
     setHighlight(highlightName);
     setSelected(file);
   }
@@ -140,8 +186,10 @@ export default function App() {
         <span className="root-path" title={root}>
           {root}
         </span>
-        <button onClick={chooseFolder}>Change folder</button>
         {error && <span className="error">{error}</span>}
+        <button aria-pressed={settingsOpen} onClick={() => setSettingsOpen((o) => !o)}>
+          ⚙ Settings
+        </button>
       </header>
       <aside className="sidebar">
         <nav aria-label="Modules">
@@ -195,7 +243,15 @@ export default function App() {
         }
       />
       <main className="main">
-        {selected && isProfiles ? (
+        {settingsOpen ? (
+          <SettingsPage
+            root={root}
+            onChangeFolder={chooseFolder}
+            bindings={bindings}
+            onChangeBindings={changeBindings}
+            onClose={() => setSettingsOpen(false)}
+          />
+        ) : selected && isProfiles ? (
           <ProfilesEditor
             key={selected.path}
             file={selected}
@@ -218,6 +274,7 @@ export default function App() {
             store={store}
             onOpen={openFile}
             onFilesChanged={() => setListVersion((v) => v + 1)}
+            findRequest={findRequest}
           />
         ) : (
           <p className="muted">Select a file.</p>

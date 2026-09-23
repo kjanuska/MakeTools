@@ -8,7 +8,12 @@ import { formatDateTime } from "./lib/format";
 import { getMakebotPath, setMakebotPath } from "./lib/settings";
 import { guardWindowClose } from "./lib/window";
 
-vi.mock("./lib/settings", () => ({ getMakebotPath: vi.fn(), setMakebotPath: vi.fn() }));
+vi.mock("./lib/settings", () => ({
+  getMakebotPath: vi.fn(),
+  setMakebotPath: vi.fn(),
+  getShortcutOverrides: vi.fn(async () => ({})),
+  setShortcutOverrides: vi.fn(async () => {}),
+}));
 vi.mock("./lib/dialogs", () => ({ pickFolder: vi.fn(), confirmAction: vi.fn(), askSaveDiscardCancel: vi.fn(), showMessage: vi.fn() }));
 vi.mock("./lib/window", () => ({ guardWindowClose: vi.fn() }));
 
@@ -101,9 +106,11 @@ describe("folder selection", () => {
     const calls = backend();
     render(<App />);
 
-    fireEvent.click(await screen.findByRole("button", { name: "Change folder" }));
+    fireEvent.click(await screen.findByRole("button", { name: "⚙ Settings" }));
+    fireEvent.click(screen.getByRole("button", { name: "Change folder…" }));
 
-    expect(await screen.findByText("D:\\Other")).toBeTruthy();
+    expect(await screen.findByText("D:\\Other", { selector: ".root-path" })).toBeTruthy();
+    expect(screen.getByText("D:\\Other", { selector: ".settings .path" })).toBeTruthy();
     expect(pickFolder).toHaveBeenCalledWith(ROOT);
     expect(setMakebotPath).toHaveBeenCalledWith("D:\\Other");
     await waitFor(() =>
@@ -117,10 +124,11 @@ describe("folder selection", () => {
     backend();
     render(<App />);
 
-    fireEvent.click(await screen.findByRole("button", { name: "Change folder" }));
+    fireEvent.click(await screen.findByRole("button", { name: "⚙ Settings" }));
+    fireEvent.click(screen.getByRole("button", { name: "Change folder…" }));
 
     expect(await screen.findByText("disk full")).toBeTruthy();
-    expect(screen.getByText(ROOT)).toBeTruthy();
+    expect(screen.getByText(ROOT, { selector: ".root-path" })).toBeTruthy();
   });
 });
 

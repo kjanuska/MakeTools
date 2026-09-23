@@ -8,7 +8,12 @@ import type { FileEntry } from "../../lib/fs";
 import { getMakebotPath, setMakebotPath } from "../../lib/settings";
 import { guardWindowClose } from "../../lib/window";
 
-vi.mock("../../lib/settings", () => ({ getMakebotPath: vi.fn(), setMakebotPath: vi.fn() }));
+vi.mock("../../lib/settings", () => ({
+  getMakebotPath: vi.fn(),
+  setMakebotPath: vi.fn(),
+  getShortcutOverrides: vi.fn(async () => ({})),
+  setShortcutOverrides: vi.fn(async () => {}),
+}));
 vi.mock("../../lib/dialogs", () => ({
   pickFolder: vi.fn(),
   confirmAction: vi.fn(),
@@ -262,9 +267,9 @@ describe("editing and saving", () => {
     await open();
     type(3, "profileName", "1");
     expect(cell(1, "profileName").title).toBe("profileName is used by more than one row");
-    expect(cell(3, "profileName").title).toBe("profileName is used by more than one row");
+    expect(cell(3, "profileName").title).toBe("profileName is used by more than one row\nWas: 3");
     type(3, "profileName", "ALL");
-    expect(cell(3, "profileName").title).toBe('profileName can\'t be "ALL"');
+    expect(cell(3, "profileName").title).toBe('profileName can\'t be "ALL"\nWas: 3');
     expect(cell(1, "profileName").getAttribute("aria-invalid")).toBeNull();
   });
 
@@ -561,15 +566,6 @@ describe("files with changes or errors", () => {
     ]);
   });
 
-  it("disables restoring a backup while the file has unsaved changes", async () => {
-    backend({ "g.csv": GOOD }, { list_backups: () => [{ id: "001790000000000", createdMs: 1_790_000_000_000, size: 5 }] });
-    await open();
-    const restore = (await screen.findByRole("button", { name: "Restore" })) as HTMLButtonElement;
-    expect(restore.disabled).toBe(false);
-    type(1, "city", "Rockford");
-    expect(restore.disabled).toBe(true);
-    expect(screen.getByText("Save or discard your changes before restoring a backup.")).toBeTruthy();
-  });
 });
 
 describe("closing with unsaved changes", () => {
@@ -630,12 +626,13 @@ describe("closing with unsaved changes", () => {
     await editTwoFiles();
     vi.mocked(pickFolder).mockResolvedValue("D:\\Other");
     vi.mocked(askSaveDiscardCancel).mockResolvedValueOnce("cancel");
-    fireEvent.click(button("Change folder"));
+    fireEvent.click(button("⚙ Settings"));
+    fireEvent.click(button("Change folder…"));
     await waitFor(() => expect(askSaveDiscardCancel).toHaveBeenCalledWith(expect.stringContaining("before switching folders"), "Unsaved changes"));
     expect(setMakebotPath).not.toHaveBeenCalled();
 
     vi.mocked(askSaveDiscardCancel).mockResolvedValueOnce("discard");
-    fireEvent.click(button("Change folder"));
+    fireEvent.click(button("Change folder…"));
     await waitFor(() => expect(setMakebotPath).toHaveBeenCalledWith("D:\\Other"));
     expect(within(changes()).getByText("None")).toBeTruthy();
   });

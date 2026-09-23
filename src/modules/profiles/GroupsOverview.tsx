@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { confirmAction } from "../../lib/dialogs";
 import type { FileEntry } from "../../lib/fs";
 import { copyName, groupNameError, groupNameOf } from "./groupNames";
@@ -14,6 +14,8 @@ interface Props {
   onOpen: (file: FileEntry, highlightName?: string) => void;
   /** Called after files were created, renamed, copied or deleted. */
   onFilesChanged: () => void;
+  /** Focuses the search box whenever this number changes (the Find shortcut). */
+  findRequest?: number;
 }
 
 type Action = { kind: "rename" | "copy"; file: FileEntry; name: string };
@@ -32,8 +34,13 @@ function statusOf(entry: DocEntry | undefined, loadError: string | undefined): {
 
 const profileCount = (e: DocEntry | undefined) => (e ? e.doc.rows.filter(isProfile).length : 0);
 
-export function GroupsOverview({ files, dir, store, onOpen, onFilesChanged }: Props) {
+export function GroupsOverview({ files, dir, store, onOpen, onFilesChanged, findRequest = 0 }: Props) {
   useStoreVersion(store);
+  const searchRef = useRef<HTMLInputElement>(null);
+  const loaded = files !== null;
+  useEffect(() => {
+    if (findRequest > 0) searchRef.current?.focus();
+  }, [findRequest, loaded]);
   const [newName, setNewName] = useState("");
   const [query, setQuery] = useState("");
   const [action, setAction] = useState<Action | null>(null);
@@ -205,6 +212,7 @@ export function GroupsOverview({ files, dir, store, onOpen, onFilesChanged }: Pr
       <section className="find" aria-label="Find profiles">
         <h3>Find a profile</h3>
         <input
+          ref={searchRef}
           aria-label="Find by profileName"
           placeholder="profileName contains…"
           value={query}
