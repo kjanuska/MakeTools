@@ -16,6 +16,8 @@ export interface FieldRule {
   reserved?: readonly string[];
   /** Value must not repeat within the file. */
   unique?: boolean;
+  /** Leading/trailing spaces are allowed (e.g. cleaned up automatically elsewhere). */
+  spacesAllowed?: boolean;
 }
 
 export type Rules<F extends string> = Record<F, FieldRule>;
@@ -26,18 +28,18 @@ export function optionsOf(rule: FieldRule): readonly string[] | null {
 }
 
 /** Checks every value must pass: characters the file format can't hold, and surrounding spaces. */
-function formatError(value: string): string | null {
+function formatError(value: string, spacesAllowed = false): string | null {
   if (value.includes(",")) return "can't contain a comma";
   if (value.includes('"')) return "can't contain a quote";
   if (/[\r\n]/.test(value)) return "can't contain a line break";
-  if (value !== value.trim()) return "can't start or end with a space";
+  if (!spacesAllowed && value !== value.trim()) return "can't start or end with a space";
   return null;
 }
 
 /** First error for a single value, ignoring `unique`. */
 export function validateValue(rule: FieldRule, value: string): string | null {
   if (value === "") return rule.required ? "is required" : null;
-  const fmt = formatError(value);
+  const fmt = formatError(value, rule.spacesAllowed);
   if (fmt) return fmt;
   if (rule.reserved?.includes(value)) return `can't be "${value}"`;
   if (rule.mustBeOption && !optionsOf(rule)?.includes(value)) return "isn't one of the allowed values";
