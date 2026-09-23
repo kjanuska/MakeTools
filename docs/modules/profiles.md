@@ -1,6 +1,6 @@
 # Profiles module spec
 
-Status: **draft, awaiting user approval** (interview held 2026-09-23). Nothing is built until the user approves it.
+Status: **draft, awaiting user approval** (interview held 2026-09-23, open questions answered the same day). Nothing is built until the user approves it.
 
 ## Purpose
 Each `profile/*.csv` file is a **profile group**, with one profile per row. Tasks (a later module) refer to profiles either by group (`ALL` = every profile in the group) or by a single `profileName`. Profiles are the base for everything else, so profile and group identity must stay stable and easy to link to later.
@@ -27,26 +27,26 @@ Confirmed with the user and checked on the 6 current files (structure only):
 ## Fields and validation
 All rules live in **one easy-to-edit config file per module**: `src/lib/rules/profiles.ts` now, and `tasks.ts` later with the same format. Each field's rule is a plain object, so tweaking one means changing one line. The same rule engine is used for every module.
 
-**Validation blocks saving:** the save button is disabled while any row the save would write has an error, and each error is shown on its cell. (See the open question about pre-existing bad rows.)
+**Validation blocks saving:** the save button is disabled while **any row in the file** has an error, including rows that were already there and weren't edited. Each error is shown on its cell. Unparseable rows are the exception: they pass through unchanged, are flagged, and don't block saving.
 
-The file format itself forbids `,`, `"`, CR and LF in any value, so this applies to every field.
+Rules for every field: the value must not contain `,`, `"`, CR or LF (the file format forbids them), and must not have spaces at the start or end (blocked, not trimmed).
 
 | Field | Required | Rule | Input |
 |---|---|---|---|
-| profileName | yes | unique within the file; not `ALL` | text |
+| profileName | yes | unique within the file (the only duplicate check); not `ALL` (case-sensitive: `all` is allowed) | text |
 | firstName | yes | none beyond the format rule | text |
 | lastName | yes | none beyond the format rule | text |
-| email | yes | _open question_ | text |
+| email | yes | valid email format: `local@domain.tld`, no spaces | text |
 | address1 | yes | none beyond the format rule | text |
 | address2 | **no** | none beyond the format rule | text |
 | city | yes | none beyond the format rule | text |
-| state | yes | uppercase 2-letter US state code | **dropdown** |
+| state | yes | one of the 50 US state codes, uppercase (DC and territories not included) | **dropdown** |
 | zipcode | yes | exactly 5 digits | text |
 | country | yes | `US` only | **dropdown** |
-| phoneNumber | yes | digits only | text |
+| phoneNumber | yes | exactly 10 digits | text |
 | ccNumber | yes | digits only, any length (all card types) | text |
 | ccMonth | yes | `01`–`12`, two digits | **dropdown** |
-| ccYear | yes | two digits (e.g. `27`) | **dropdown** |
+| ccYear | yes | two digits; the dropdown shows the current year to +10 (`26`–`36` in 2026), plus an older value a row already has | **dropdown** |
 | cvv | yes | digits only, any length | text |
 
 Rule: when a field's set of allowed values is known and reasonably small, it's shown as a dropdown.
@@ -57,7 +57,8 @@ No masking. Card numbers and CVVs are shown in full in the grid. They are still 
 Per group (the file being edited):
 - Add, delete, duplicate and reorder rows.
 - **Bulk edit:** select many rows (or the whole group) and set one field to the same value on all of them.
-- **Create from template:** pick an existing row as a template and create N new rows from it with auto-assigned profile names (see open questions).
+- **Create from template:** pick an existing row as a template and create N new rows from it.
+- **Default profileName for new rows** (added, from a template or pasted without a name): the row's 1-based position in the file, not counting the header. For example, a new 51st row gets `51`. It can be edited afterwards. If that name is already taken, the uniqueness rule flags it like any other duplicate.
 - **Import:** paste rows in the same 15-column comma-separated format and add them to the group. They're validated like any other row.
 
 Across groups:
@@ -81,14 +82,17 @@ Same change as the feature, following the project's testing rules:
 - Bulk edit, template creation, import parsing, and move/copy between groups including name clashes.
 - Rust: `rename_file` and `delete_file` back up first, work atomically and fail safely.
 
+## Decisions (open questions answered 2026-09-23)
+1. Saving is blocked until **every** row in the file is valid, including old placeholder rows.
+2. email: valid email format check.
+3. phoneNumber: exactly 10 digits.
+4. state: the 50 states only.
+5. ccYear: current year to +10, and an older existing value is still shown.
+6. `ALL` is reserved only in that exact uppercase form.
+7. New rows' profileName defaults to their row number, and can be edited.
+8. Spaces at the start or end of a value block saving.
+9. Rules live in a config file in the code, not an in-app editor.
+10. profileName must be unique within a file. There are no other duplicate checks.
+
 ## Open questions
-1. **Pre-existing invalid rows:** current files have placeholder rows that break the rules (letters in zipcode, lowercase state). Should save be blocked until **every** row in the file is valid, or only until the rows **you changed or added** are valid?
-2. **email:** should it be checked (for example, something@something.something), or accepted as any value?
-3. **phoneNumber:** digits only, or exactly 10 digits?
-4. **state list:** only the 50 states, or also DC and territories (PR, GU, VI, …)?
-5. **ccYear dropdown range:** for example, this year to +10 (`26`–`36`)? Should older years be kept as options for existing rows?
-6. **`ALL`:** reserved only in exactly that form, or in any case (`all`, `All`)?
-7. **Template naming:** new rows take the next free numbers after the highest numeric `profileName` in the group (for example `51`, `52`, …)? Or do you set a prefix and start number?
-8. **Leading or trailing spaces** in a value: allow them, block them, or trim them automatically?
-9. **Rule config editing:** is a code-level config file (`src/lib/rules/profiles.ts`) "easy to edit" enough, or do you want to edit rules inside the app?
-10. **"Duplicates don't really matter":** I read this as "I don't need a view to find duplicates," so duplicate `profileName` within a file still blocks saving. Correct?
+_None._
