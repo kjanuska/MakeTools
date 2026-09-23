@@ -72,7 +72,7 @@ button:disabled {
 
 .app {
   display: grid;
-  grid-template-columns: 160px 260px 1fr;
+  grid-template-columns: 160px 260px minmax(0, 1fr);
   grid-template-rows: auto 1fr;
   grid-template-areas:
     "top top top"
@@ -185,4 +185,159 @@ button:disabled {
   text-align: left;
   padding: 4px 16px 4px 0;
   border-bottom: 1px solid var(--border);
+}
+
+/* Profiles editor */
+
+.editor-head {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.editor-head h2 {
+  margin: 0 0 8px;
+}
+
+.toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.toolbar-sep {
+  width: 1px;
+  align-self: stretch;
+  background: var(--border);
+  margin: 0 4px;
+}
+
+button.primary:not(:disabled) {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+
+button[aria-pressed="true"] {
+  background: var(--accent-bg);
+  color: var(--accent);
+}
+
+.editor-status {
+  margin: 8px 0;
+}
+
+.unsaved {
+  color: var(--accent);
+}
+
+.action-panel {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  padding: 10px;
+  margin-bottom: 10px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+}
+
+.action-panel.import {
+  align-items: flex-start;
+}
+
+.action-panel textarea {
+  flex: 1;
+  min-width: 300px;
+  min-height: 90px;
+  font-family: Consolas, monospace;
+}
+
+.action-panel .count {
+  width: 60px;
+}
+
+.grid-wrap {
+  overflow: auto;
+  max-height: 60vh;
+  border: 1px solid var(--border);
+}
+
+.grid {
+  border-collapse: collapse;
+}
+
+.grid th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--panel);
+  text-align: left;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.grid th,
+.grid td {
+  padding: 2px 4px;
+  border-bottom: 1px solid var(--border);
+}
+
+.grid tr.selected td {
+  background: var(--accent-bg);
+}
+
+.row-number {
+  color: var(--muted);
+  text-align: right;
+}
+
+.raw-row {
+  font-family: Consolas, monospace;
+  white-space: pre;
+}
+
+input,
+select,
+textarea {
+  font: inherit;
+  color: inherit;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  padding: 2px 4px;
+}
+
+.cell {
+  width: 130px;
+}
+
+.cell-profileName,
+.cell-state,
+.cell-country,
+.cell-ccMonth,
+.cell-ccYear,
+.cell-cvv {
+  width: 70px;
+}
+
+.cell-email,
+.cell-address1,
+.cell-ccNumber {
+  width: 180px;
+}
+
+.cell.invalid {
+  border-color: var(--error);
+  outline: 1px solid var(--error);
+  background: color-mix(in srgb, var(--error) 10%, var(--bg));
+}
+
+.error-list ul {
+  margin: 0;
+  padding-left: 20px;
+  color: var(--error);
 }

@@ -1,6 +1,6 @@
 # Profiles module spec
 
-Status: **draft, awaiting user approval** (interview held 2026-09-23, open questions answered the same day). Nothing is built until the user approves it.
+Status: **approved** by the user on 2026-09-23. It is built in two parts: **2a** (editing one group) and **2b** (working across groups). See the ROADMAP.
 
 ## Purpose
 Each `profile/*.csv` file is a **profile group**, with one profile per row. Tasks (a later module) refer to profiles either by group (`ALL` = every profile in the group) or by a single `profileName`. Profiles are the base for everything else, so profile and group identity must stay stable and easy to link to later.
@@ -96,3 +96,15 @@ Same change as the feature, following the project's testing rules:
 
 ## Open questions
 _None._
+
+## Build notes (2a, 2026-09-23)
+Details settled while building. Each is small, and the user can change any of them at the 2a check:
+- **New rows always go at the end:** added, duplicated, from a template, or pasted. Use Move up/down to reorder. This keeps new row numbers (and so default names) from clashing with rows below them.
+- **Add row** prefills `country` with `US`, the only allowed value. Every other field starts empty.
+- **Duplicate** copies every value except `profileName`, which becomes the new row number.
+- **Paste rows** rejects the whole paste if any line doesn't have exactly 15 values. A pasted row with an empty name gets its row number.
+- **Template count** is 1–1000 per action.
+- **Save safety:** before writing, the file is read again. If another program (such as Ron's Data Edit) changed it since it was opened here, the app asks before overwriting it. After writing, the file is read back and compared with what was sent.
+- **Restoring a backup** is disabled while there are unsaved changes.
+- **Unsaved changes** trigger a prompt before switching file, module or folder, or closing the window. The window close needs the `core:window:allow-destroy` capability.
+- Code: format in `src/lib/formats/profiles.ts`, rules engine and config in `src/lib/rules/`, edit operations in `src/modules/profiles/ops.ts`, and UI in `src/modules/profiles/ProfilesEditor.tsx`.

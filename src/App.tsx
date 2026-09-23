@@ -1,10 +1,12 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import "./App.css";
-import { pickFolder } from "./lib/dialogs";
+import { confirmAction, pickFolder } from "./lib/dialogs";
 import type { FileEntry } from "./lib/fs";
 import { MODULES, type ModuleId } from "./lib/modules";
 import { joinPath } from "./lib/paths";
 import { getMakebotPath, setMakebotPath } from "./lib/settings";
+import { guardWindowClose } from "./lib/window";
+import { ProfilesEditor } from "./modules/profiles/ProfilesEditor";
 import { FileList } from "./shell/FileList";
 import { FilePanel } from "./shell/FilePanel";
 
@@ -15,6 +17,11 @@ export default function App() {
   const [selected, setSelected] = useState<FileEntry | null>(null);
   const [listVersion, setListVersion] = useState(0);
   const [error, setError] = useState<string | null>(null);
+  // Whether the open editor has unsaved changes. A ref so the close guard sees the latest value.
+  const dirtyRef = useRef(false);
+  const onDirtyChange = useCallback((dirty: boolean) => {
+    dirtyRef.current = dirty;
+  }, []);
 
   useEffect(() => {
     getMakebotPath()
@@ -22,11 +29,29 @@ export default function App() {
       .catch(() => setRoot(null));
   }, []);
 
+  useEffect(() => {
+    const unlisten = guardWindowClose(confirmLeave).catch(() => null);
+    return () => {
+      unlisten.then((f) => f?.());
+    };
+  }, []);
+
+  /** True if there are no unsaved changes, or the user agrees to discard them. */
+  async function confirmLeave(): Promise<boolean> {
+    if (!dirtyRef.current) return true;
+    return confirmAction("You have unsaved changes. Discard them?", "Unsaved changes");
+  }
+
+  async function selectFile(file: FileEntry) {
+    if (file.path === selected?.path || !(await confirmLeave())) return;
+    setSelected(file);
+  }
+
   async function chooseFolder() {
     setError(null);
     try {
       const path = await pickFolder(root ?? undefined);
-      if (!path) return;
+      if (!path || !(await confirmLeave())) return;
       await setMakebotPath(path);
       setRoot(path);
       setSelected(null);
@@ -35,7 +60,8 @@ export default function App() {
     }
   }
 
-  function selectModule(id: ModuleId) {
+  async function selectModule(id: ModuleId) {
+    if (id === moduleId || !(await confirmLeave())) return;
     setModuleId(id);
     setSelected(null);
   }
@@ -82,11 +108,18 @@ export default function App() {
         dir={joinPath(root, mod.folder)}
         extension={mod.extension}
         selectedPath={selected?.path ?? null}
-        onSelect={setSelected}
+        onSelect={selectFile}
         version={listVersion}
       />
       <main className="main">
-        {selected ? (
+        {selected && mod.id === "profiles" ? (
+          <ProfilesEditor
+            key={selected.path}
+            file={selected}
+            onChanged={() => setListVersion((v) => v + 1)}
+            onDirtyChange={onDirtyChange}
+          />
+        ) : selected ? (
           <FilePanel
             key={selected.path}
             file={selected}

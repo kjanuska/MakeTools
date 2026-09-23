@@ -6,9 +6,11 @@ import { confirmAction, pickFolder } from "./lib/dialogs";
 import type { BackupEntry, FileEntry, TextFile } from "./lib/fs";
 import { formatDateTime } from "./lib/format";
 import { getMakebotPath, setMakebotPath } from "./lib/settings";
+import { guardWindowClose } from "./lib/window";
 
 vi.mock("./lib/settings", () => ({ getMakebotPath: vi.fn(), setMakebotPath: vi.fn() }));
 vi.mock("./lib/dialogs", () => ({ pickFolder: vi.fn(), confirmAction: vi.fn() }));
+vi.mock("./lib/window", () => ({ guardWindowClose: vi.fn() }));
 
 const ROOT = "C:\\Makebot";
 
@@ -52,6 +54,7 @@ const callsOf = (calls: Call[], cmd: string) => calls.filter((c) => c.cmd === cm
 beforeEach(() => {
   vi.mocked(getMakebotPath).mockResolvedValue(ROOT);
   vi.mocked(setMakebotPath).mockResolvedValue();
+  vi.mocked(guardWindowClose).mockResolvedValue(() => {});
 });
 
 async function openAccountFile() {
