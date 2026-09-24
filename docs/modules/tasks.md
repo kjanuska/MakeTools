@@ -46,7 +46,7 @@ All rules live in `src/lib/rules/tasks.ts`, using the same engine and one-line-p
 | profileName | **dropdown**: `ALL` + the profile names in the chosen group | Disabled until a profileGroup is chosen, then defaults to `ALL`. **Error** if set without a profileGroup (e.g. hand-edited), or if the name isn't in that group. |
 | proxyGroup | **dropdown** of `proxy/*.txt` | required; must exist |
 | accountGroup | **dropdown** of `account/*.txt` | required; must exist |
-| input | text, plus a read-only **parsed** column | required; cleaned up automatically; no classifying or lowercasing |
+| input | text, shown as its **parsed** keywords until clicked into | required; cleaned up automatically; no classifying or lowercasing |
 | size | text; **`random` is shown distinctly** (e.g. a 🎲 random chip) | required; free string, e.g. `9&9.5&10`, `Medium&Large`, `whole` |
 | color | text; **`random` shown distinctly** | required; free string (the 2 current rows with an empty color will show as errors) |
 | site | **dropdown** of the global site list, plus **"Add site…"** | required; must be in the list |
@@ -61,7 +61,7 @@ All rules live in `src/lib/rules/tasks.ts`, using the same engine and one-line-p
 
 ### input
 - Always treated as a **string**. It's never lowercased or sorted into keywords/variants/SKUs; uppercase codes like `A1234-123` are fine.
-- **Parsed column:** when an input contains spaces, the words are split into **positive** (no leading `-`) and **negative** (leading `-`) and shown next to the input. It updates when you leave the cell.
+- **Parsed view:** when an input contains spaces, the words are split into **positive** (no leading `-`) and **negative** (leading `-`) and shown in the input cell in place of the raw text. Clicking into the cell shows the raw text to edit; the parsed view comes back when you leave the cell.
 - The parsing rules (separator, negative prefix) live in the tasks rules config, and more input validation will be added there later.
 
 ### Sites
@@ -116,7 +116,7 @@ Profiles and tasks are both unquoted CSVs with a fixed header. The CSV parser, t
 - **Templates and duplicates** copy task rows exactly, since tasks have no names.
 - **"Add site…"** opens a small "New site" field above the grid. The site is added to the global list (and saved) and put in the cell.
 - **Mode editor:** clicking a mode cell opens a popover. It lists the parts in order, with ← → × buttons and an "Add part…" dropdown.
-- **Parsed column:** shows positive keywords and red "−negative" keywords. While an input is being edited it keeps the old view, and it updates when you leave the cell. That's also when the spaces are cleaned up.
+- **Parsed view (in the input cell, no separate column):** shows positive keywords and red "−negative" keywords. Clicking into the cell shows the raw text for editing; leaving it cleans up the spaces and shows the updated view. Single-word inputs just show their text.
 - **Tasks column and counts:** `?` means the count isn't known (an unknown group). Totals show that as "(+N unknown)".
 - **Site rename:** the new site list is applied to the task checks before files are saved, so renamed tasks are valid when they're saved. A file that can't be saved (e.g. it has other errors) keeps the rename as unsaved changes, and the result message lists it.
 - **Real-file tests:**

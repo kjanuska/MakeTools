@@ -5,8 +5,12 @@ import type { TableSchema } from "../../lib/table/schema";
 import type { DocEntry } from "../../lib/table/store";
 
 export type CellType<Ctx> =
-  /** Free text. `random` highlights the special value "random". */
-  | { kind: "text"; random?: boolean }
+  /**
+   * Free text. `random` highlights the special value "random". `display`, when
+   * it returns something, is shown in place of the text while the cell isn't
+   * being edited; clicking into the cell shows the text to edit.
+   */
+  | { kind: "text"; random?: boolean; display?: (value: string) => ReactNode }
   /** Dropdown. `add` puts an "Add…" entry at the end that creates a new option. */
   | {
       kind: "select";
@@ -23,11 +27,6 @@ export interface ExtraColumn<Ctx> {
   header: string;
   /** Shown after this field column. */
   after: number;
-  /**
-   * While this column is being edited, the extra column keeps showing the
-   * values from before (it updates when you leave the cell).
-   */
-  commitCol?: number;
   className?: string;
   render(values: readonly string[], ctx: Ctx): ReactNode;
 }

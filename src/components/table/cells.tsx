@@ -15,6 +15,8 @@ export interface CellProps<Ctx> {
   /** Saved value, when this cell was changed. */
   was?: string;
   label: string;
+  /** The cell is being edited (text cells then show their text, not `display`). */
+  focused?: boolean;
   disabled?: boolean;
   dataRow?: number;
   dataCol?: number;
@@ -84,15 +86,26 @@ export function Cell<Ctx>(props: CellProps<Ctx>) {
       return <PartsCell {...props} type={type} />;
     case "text": {
       const random = type.random && value === "random";
-      return (
+      const shown = props.focused ? null : type.display?.(value);
+      const input = (
         <input
           {...common}
-          className={`${common.className}${random ? " is-random" : ""}`}
+          className={`${common.className}${random ? " is-random" : ""}${shown != null ? " has-display" : ""}`}
           value={value}
           spellCheck={false}
           autoComplete="off"
           onChange={(e) => onChange(e.target.value)}
         />
+      );
+      if (shown == null) return input;
+      // The input stays underneath (for focus, keyboard moves and clicks); the view covers its text.
+      return (
+        <div className="display-cell">
+          {input}
+          <div className="cell-display" aria-hidden>
+            {shown}
+          </div>
+        </div>
       );
     }
   }

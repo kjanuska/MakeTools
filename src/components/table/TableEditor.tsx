@@ -520,11 +520,6 @@ function GridRowImpl<Ctx>(props: GridRowProps<Ctx>) {
   const isNew = row.kind === "record" && !original;
   const classes = [selected && "selected", isNew && "new-row"].filter(Boolean).join(" ");
 
-  // Extra columns tied to a cell keep the values from before it was being edited.
-  const values = row.kind === "record" ? row.values : [];
-  const committed = useRef(values);
-  if (!extras.some((x) => x.commitCol !== undefined && x.commitCol === focusCol)) committed.current = values;
-
   return (
     <tr className={classes || undefined} aria-selected={selected}>
       <th
@@ -564,6 +559,7 @@ function GridRowImpl<Ctx>(props: GridRowProps<Ctx>) {
                 error={error}
                 was={was}
                 label={`Row ${number} ${f}`}
+                focused={focusCol === col}
                 disabled={readOnly}
                 dataRow={index}
                 dataCol={col}
@@ -578,7 +574,7 @@ function GridRowImpl<Ctx>(props: GridRowProps<Ctx>) {
               .filter((x) => x.after === col)
               .map((x) => (
                 <td key={`x-${x.header}`} className={`extra-td ${x.className ?? ""}`} aria-label={`Row ${number} ${x.header}`}>
-                  {x.render(x.commitCol !== undefined ? committed.current : row.values, ctx)}
+                  {x.render(row.values, ctx)}
                 </td>
               )),
           ];
@@ -676,7 +672,9 @@ function BulkEditPanel<Ctx>({
   const [col, setCol] = useState(ui.bulkDefaultCol);
   const type: CellType<Ctx> = ui.cell(col);
   // Dependent dropdowns stay usable here even if the sample row disables them.
-  const panelType: CellType<Ctx> = type.kind === "select" ? { ...type, disabled: undefined } : type;
+  // The typed value is shown as-is, not as a display view.
+  const panelType: CellType<Ctx> =
+    type.kind === "select" ? { ...type, disabled: undefined } : type.kind === "text" ? { ...type, display: undefined } : type;
   return (
     <section className="action-panel" aria-label="Bulk edit">
       <strong>Bulk edit</strong>

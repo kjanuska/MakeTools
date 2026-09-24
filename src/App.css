@@ -748,8 +748,26 @@ button.link {
   background: var(--panel);
 }
 
-.grid .parsed-td {
-  min-width: 160px;
+/* A text cell showing a view (e.g. parsed keywords) over its text until it's edited. */
+.display-cell {
+  position: relative;
+  height: 100%;
+}
+
+.grid .cell.has-display {
+  color: transparent;
+  cursor: text;
+}
+
+.cell-display {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  padding: 0 6px;
+  overflow: hidden;
+  white-space: nowrap;
+  pointer-events: none;
 }
 
 .grid .extra-td.num {

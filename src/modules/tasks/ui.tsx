@@ -41,7 +41,7 @@ export function makeTaskUI(addSite: (site: string) => void): TableUI<TaskContext
     },
     [C.proxyGroup]: { kind: "select", options: (_, ctx) => sorted(ctx.proxyGroups) },
     [C.accountGroup]: { kind: "select", options: (_, ctx) => sorted(ctx.accountGroups) },
-    [C.input]: { kind: "text" },
+    [C.input]: { kind: "text", display: parsedInput },
     [C.size]: { kind: "text", random: true },
     [C.color]: { kind: "text", random: true },
     [C.site]: {
@@ -74,13 +74,6 @@ export function makeTaskUI(addSite: (site: string) => void): TableUI<TaskContext
     },
     cleanOnBlur: (col, value) => (col === C.input ? cleanInput(value) : value),
     extraColumns: [
-      {
-        header: "parsed",
-        after: C.input,
-        commitCol: C.input,
-        className: "parsed-td",
-        render: (values) => <ParsedInput input={values[C.input]} />,
-      },
       {
         header: "tasks",
         after: TASK_FIELDS.length - 1,
@@ -123,8 +116,8 @@ export function makeTaskUI(addSite: (site: string) => void): TableUI<TaskContext
   };
 }
 
-/** Positive and negative keywords of an input with several words. */
-function ParsedInput({ input }: { input: string }) {
+/** Positive and negative keywords of an input with several words (none for one word). */
+function parsedInput(input: string) {
   const parsed = parseInput(input);
   if (!parsed) return null;
   return (

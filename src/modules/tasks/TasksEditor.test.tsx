@@ -268,23 +268,41 @@ describe("task cells", () => {
     expect(cell(1, "cartQuantity").title).toBe("cartQuantity must be a whole number, 1 or more\nWas: 1");
   });
 
-  it("the parsed column shows keywords and updates when you leave the input", async () => {
+  it("the input shows its parsed keywords until you click into it", async () => {
     backend({ "t.csv": taskFile([task({ input: "box logo -tee" })]) });
     await openTaskFile();
-    const parsed = () => [...extra(1, "parsed").querySelectorAll(".kw")].map((k) => k.textContent);
+    const parsed = () => [...td(1, "input").querySelectorAll(".kw")].map((k) => k.textContent);
     expect(parsed()).toEqual(["box", "logo", "−tee"]);
+    expect(cell(1, "input").className).toContain("has-display");
+    expect(screen.queryByRole("columnheader", { name: "parsed" })).toBeNull();
+    // Editing shows the raw text.
     fireEvent.focus(cell(1, "input"));
+    expect(parsed()).toEqual([]);
+    expect(cell(1, "input").className).not.toContain("has-display");
     type(1, "input", "  hoodie   -shirt  ");
-    expect(parsed()).toEqual(["box", "logo", "−tee"]);
+    expect(parsed()).toEqual([]);
+    // Leaving cleans the spaces and shows the new keywords.
     fireEvent.blur(cell(1, "input"));
     expect(cell(1, "input").value).toBe("hoodie -shirt");
     expect(parsed()).toEqual(["hoodie", "−shirt"]);
   });
 
-  it("a single-word input has no parsed view", async () => {
+  it("a single-word input shows its text", async () => {
     backend({ "t.csv": taskFile([task({ input: "AB1234-123" })]) });
     await openTaskFile();
-    expect(extra(1, "parsed").textContent).toBe("");
+    expect(td(1, "input").querySelector(".cell-display")).toBeNull();
+    expect(cell(1, "input").className).not.toContain("has-display");
+    expect(cell(1, "input").value).toBe("AB1234-123");
+  });
+
+  it("bulk edit shows the typed input as text", async () => {
+    backend({ "t.csv": taskFile([task()]) });
+    await openTaskFile();
+    const panel = screen.getByRole("region", { name: "Bulk edit" });
+    fireEvent.change(within(panel).getByRole("combobox", { name: /Field/ }), { target: { value: "input" } });
+    fireEvent.change(within(panel).getByLabelText("New value"), { target: { value: "box logo" } });
+    expect((within(panel).getByLabelText("New value") as HTMLInputElement).value).toBe("box logo");
+    expect(panel.querySelector(".cell-display")).toBeNull();
   });
 
   it("shows tasks per row and in total", async () => {
