@@ -127,3 +127,24 @@ export function nameClashes(schema: TableSchema<never>, target: TableDoc, names:
   }
   return clashes;
 }
+
+/**
+ * Replaces every record with `rows` (e.g. a generated task file). Blank and
+ * unparseable lines are kept, and the new records go where the first record
+ * was. The i-th new record takes over the i-th old record's id and line
+ * ending, so an unchanged row stays the same object and changed cells show
+ * what they were.
+ */
+export function replaceRecords(doc: TableDoc, rows: readonly (readonly string[])[]): TableDoc {
+  const old = doc.rows.filter(isRecord);
+  const records: DataRow[] = rows.map((values, i) => {
+    const prev = old[i];
+    if (!prev) return { kind: "record", id: newRowId(), values: [...values], eol: "" };
+    if (prev.values.length === values.length && prev.values.every((v, j) => v === values[j])) return prev;
+    return { ...prev, values: [...values] };
+  });
+  const first = doc.rows.findIndex(isRecord);
+  const kept = doc.rows.filter((r) => !isRecord(r));
+  const at = first < 0 ? kept.length : first;
+  return { ...doc, rows: [...kept.slice(0, at), ...records, ...kept.slice(at)] };
+}
