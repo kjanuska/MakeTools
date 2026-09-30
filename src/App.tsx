@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import "./App.css";
+import { ModuleIcon } from "./components/ModuleIcon";
 import { TableOverview } from "./components/table/TableOverview";
 import { TaskFileView } from "./modules/tasks/TaskFileView";
 import { askSaveDiscardCancel, confirmAction, pickFolder, showMessage } from "./lib/dialogs";
@@ -447,7 +448,8 @@ export default function App() {
               aria-current={m.id === mod.id ? "page" : undefined}
               onClick={() => selectModule(m.id)}
             >
-              {m.label}
+              <ModuleIcon id={m.id} />
+              <span>{m.label}</span>
             </button>
           ))}
         </nav>

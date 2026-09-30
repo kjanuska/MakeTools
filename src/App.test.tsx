@@ -142,6 +142,25 @@ describe("folder selection", () => {
 });
 
 describe("modules and file list", () => {
+  it("each module tab has its own decorative icon; the label stays the tab's name", async () => {
+    backend();
+    render(<App />);
+    const nav = await screen.findByRole("navigation", { name: "Modules" });
+    const tabs = within(nav).getAllByRole("button");
+    expect(tabs.map((t) => t.textContent)).toEqual(["Accounts", "Profiles", "Proxies", "Tasks"]);
+    const icons = tabs.map((t) => t.querySelector("svg.module-icon")!);
+    expect(icons.map((i) => i.getAttribute("data-icon"))).toEqual(["accounts", "profiles", "proxies", "tasks"]);
+    for (const i of icons) {
+      expect(i.getAttribute("aria-hidden")).toBe("true");
+      expect(i.childElementCount).toBeGreaterThan(0);
+    }
+    // Drawn differently, not one icon repeated.
+    expect(new Set(icons.map((i) => i.innerHTML)).size).toBe(4);
+    for (const name of ["Accounts", "Profiles", "Proxies", "Tasks"]) {
+      expect(within(nav).getByRole("button", { name })).toBeTruthy();
+    }
+  });
+
   it("lists each module's folder with its extension", async () => {
     const calls = backend();
     render(<App />);

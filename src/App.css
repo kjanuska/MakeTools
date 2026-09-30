@@ -420,6 +420,23 @@ textarea {
   gap: 2px;
 }
 
+.sidebar .nav-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.module-icon {
+  flex: none;
+  color: var(--muted);
+  transition: color 0.12s;
+}
+
+.nav-item:hover .module-icon,
+.nav-item[aria-current] .module-icon {
+  color: var(--accent);
+}
+
 .changes {
   margin-top: 16px;
   padding-top: 8px;
