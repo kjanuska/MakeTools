@@ -1,4 +1,7 @@
+/// <reference types="node" />
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import fs from "node:fs";
+import path from "node:path";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import App from "../../App";
 import { confirmAction } from "../../lib/dialogs";
@@ -435,6 +438,18 @@ describe("task builder: an input's splits dialog", () => {
 });
 
 describe("task file header", () => {
+  it("sits flush with the top of the scrolling area (no padding for content to show through)", async () => {
+    backend({ "h.csv": taskFile([task()]) });
+    await openFile("h.csv");
+    // tasks.css takes .main's padding away when a task file is its direct child, and
+    // the sticky header sticks at top 0 across the full width.
+    expect(document.querySelector("main.main > .task-file > .task-head")).toBeTruthy();
+    const css = fs.readFileSync(path.join(__dirname, "tasks.css"), "utf8");
+    expect(css).toMatch(/\.main:has\(> \.task-file\) \{\s*padding: 0;/);
+    expect(css).toMatch(/\.task-head \{[^}]*position: sticky;[^}]*top: 0;[^}]*margin: 0 -20px/);
+    expect(css).toMatch(/\.task-file \{\s*padding: 0 20px/);
+  });
+
   it("holds Apply to file and Reset to file next to Save, in the sticky header", async () => {
     backend({ "h.csv": taskFile([task()]) });
     await openFile("h.csv");

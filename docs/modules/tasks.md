@@ -196,6 +196,7 @@ The user doesn't edit tasks one row at a time. They think of a task file as a **
     - Next to the buttons it shows either the "Replaces every task row…" note or "N problems to fix", which is a link that scrolls to the list under the builder.
     - The builder puts its buttons there through a React portal, so its state stays in the builder.
     - The counts panel sticks just below the header, whose height is measured into `--task-head-h`.
+    - A sticky element stops at the inside of its scroll container's padding. So while a task file is open, `.main` has no padding (`.main:has(> .task-file)`) and the task file pads itself. That way the header reaches the top and both sides, and nothing shows through above it.
     - (From the sixth check on 2026-09-30.)
   - "Reset to file" goes back to the file's counts.
   - The builder starts again from the file whenever its rows change (apply, discard or restore).

@@ -86,15 +86,25 @@
 
 /*
  * The task file's header (file name, tabs, Apply/Reset and Save/Discard,
- * status) stays at the top of the scrolling main area. The negative margins
- * cancel .main's padding, so the header starts at the very top and its
- * background covers the full width.
+ * status) stays at the top of the scrolling main area. A sticky element stops
+ * at the inside of its scroll container's padding, which left a strip at the
+ * top that content showed through. So while a task file is open the main
+ * area has no padding: the task file pads itself, and the header reaches the
+ * top and both sides.
  */
+.main:has(> .task-file) {
+  padding: 0;
+}
+
+.task-file {
+  padding: 0 20px 16px;
+}
+
 .task-head {
   position: sticky;
   top: 0;
   z-index: 10;
-  margin: -16px -20px 12px;
+  margin: 0 -20px 12px;
   padding: 16px 20px 6px;
   background: var(--bg);
   border-bottom: 1px solid var(--border);
@@ -119,8 +129,8 @@ button.link.error {
 
 /* The counts panel sticks just below the header (its height is measured into --task-head-h). */
 .task-file .task-layout > .task-counts {
-  top: var(--task-head-h, 0px);
-  max-height: calc(100vh - var(--task-head-h, 0px) - 40px);
+  top: calc(var(--task-head-h, 0px) + 12px);
+  max-height: calc(100vh - var(--task-head-h, 0px) - 60px);
 }
 
 @media (max-width: 1100px) {
