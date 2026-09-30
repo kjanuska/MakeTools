@@ -17,7 +17,7 @@ export interface Account {
 
 export type AccountLine =
   | { kind: "account"; line: number; account: Account }
-  /** A blank line or one that isn't in the account format. Shown, never changed. */
+  /** A blank line or one without 2, 4 or 6 parts. Shown, never changed. */
   | { kind: "raw"; line: number; text: string };
 
 export interface AccountsDoc {
@@ -28,21 +28,13 @@ export interface AccountsDoc {
   trailingNewline: boolean;
 }
 
-/** Why a line isn't a valid account, or null if it is. `parts` is the line split on ":". */
+/**
+ * Why a line isn't in the account format, or null if it is. Only the number
+ * of parts is checked: the values themselves can be anything.
+ */
 function problemOf(parts: string[]): string | null {
-  if (![2, 4, 6].includes(parts.length)) {
-    return `Expected email:password, optionally followed by :host:port and :user:pass (found ${parts.length} ${parts.length === 1 ? "part" : "parts"}).`;
-  }
-  const [email, password, host, port, user, pass] = parts;
-  if (!email.includes("@")) return "The email has no @.";
-  if (/\s/.test(email)) return "The email contains a space.";
-  if (password === "") return "The password is empty.";
-  if (parts.length >= 4) {
-    if (host === "") return "The proxy host is empty.";
-    if (!/^\d+$/.test(port) || Number(port) < 1 || Number(port) > 65535) return "The proxy port must be a number from 1 to 65535.";
-  }
-  if (parts.length === 6 && (user === "" || pass === "")) return "The proxy user and password can't be empty.";
-  return null;
+  if ([2, 4, 6].includes(parts.length)) return null;
+  return `Expected email:password, optionally followed by :host:port and :user:pass (found ${parts.length} ${parts.length === 1 ? "part" : "parts"}).`;
 }
 
 function toAccount(parts: string[]): Account {
@@ -83,43 +75,26 @@ export const oddLines = (doc: AccountsDoc) => doc.lines.filter((l) => l.kind ===
 
 export const hasProxy = (a: Account) => a.proxyHost !== undefined;
 
-/** Emails are compared without case. */
-export const emailKey = (email: string) => email.toLowerCase();
-
 export interface ImportPlan {
-  /** Lines to append, trimmed, in the order pasted. */
+  /** Lines to append, exactly as pasted, in order. */
   add: { line: number; text: string; account: Account }[];
-  /** Emails already in the file, or earlier in the paste. Skipped. */
-  duplicates: { line: number; email: string; inFile: boolean }[];
   invalid: { line: number; text: string; reason: string }[];
 }
 
 /**
- * Sorts pasted text into accounts to add, duplicates and invalid lines.
- * Blank lines are ignored; spaces around a line are trimmed.
+ * Sorts pasted text into lines to add and lines not in the account format.
+ * Blank lines are ignored. Nothing else is checked or changed.
  */
-export function planImport(pasted: string, existingEmails: Iterable<string>): ImportPlan {
-  const inFile = new Set([...existingEmails].map(emailKey));
-  const seen = new Set<string>();
-  const plan: ImportPlan = { add: [], duplicates: [], invalid: [] };
+export function planImport(pasted: string): ImportPlan {
+  const plan: ImportPlan = { add: [], invalid: [] };
   const text = pasted.startsWith("﻿") ? pasted.slice(1) : pasted;
   splitLines(text).forEach((l, i) => {
     const line = i + 1;
-    const t = l.text.trim();
-    if (t === "") return;
-    const parts = t.split(":");
+    if (l.text.trim() === "") return;
+    const parts = l.text.split(":");
     const reason = problemOf(parts);
-    if (reason) {
-      plan.invalid.push({ line, text: t, reason });
-      return;
-    }
-    const key = emailKey(parts[0]);
-    if (inFile.has(key) || seen.has(key)) {
-      plan.duplicates.push({ line, email: parts[0], inFile: inFile.has(key) });
-      return;
-    }
-    seen.add(key);
-    plan.add.push({ line, text: t, account: toAccount(parts) });
+    if (reason) plan.invalid.push({ line, text: l.text, reason });
+    else plan.add.push({ line, text: l.text, account: toAccount(parts) });
   });
   return plan;
 }

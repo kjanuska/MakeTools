@@ -191,21 +191,19 @@ describe("account group page", () => {
 });
 
 describe("importing accounts", () => {
-  it("previews new, duplicate and invalid lines", async () => {
+  it("previews the lines to add and the ones not in the format, without deduplicating", async () => {
     backend({ [`${ACC}\\popmart.txt`]: POPMART });
     await openGroup("popmart");
-    paste("new1@gmail.com:pw\nA.ONE@gmail.com:other\nnew1@gmail.com:again\nbroken\nnew2@x.com:pw:9.9.9.9:99999\n\nnew3@x.com:pw:9.9.9.9:80:u:p");
-    expect(screen.getByRole("status").textContent).toBe("2 new accounts · 2 duplicates skipped · 2 invalid lines skipped");
+    paste("new1@gmail.com:pw\na.one@gmail.com:Pass.?1\nnew1@gmail.com:pw\nbroken\nnot-an-email:pw:host:port\n\nnew3@x.com:pw:9.9.9.9:80:u:p");
+    expect(screen.getByRole("status").textContent).toBe("5 accounts to add · 1 line not in the format, skipped");
     expect(screen.getByText("broken").closest("li")!.textContent).toContain("Line 4");
-    expect(screen.getByText(/Line 2: A.ONE@gmail.com — already in this file/)).toBeTruthy();
-    expect(screen.getByText(/Line 3: new1@gmail.com — earlier in the import/)).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Add 2 accounts" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Add 5 accounts" })).toBeTruthy();
   });
 
   it("appends the new accounts with the file's line endings, keeping every existing byte", async () => {
     const { disk, saves } = backend({ [`${ACC}\\popmart.txt`]: POPMART });
     await openGroup("popmart");
-    paste("  new1@gmail.com:pw  \nbroken\nnew2@x.com:pw:9.9.9.9:80:u:p\n");
+    paste("new1@gmail.com:pw\nbroken\nnew2@x.com:pw:9.9.9.9:80:u:p\n");
     fireEvent.click(screen.getByRole("button", { name: "Add 2 accounts" }));
 
     expect(await screen.findByText("Added 2 accounts to popmart. Skipped 1. The previous version was backed up.")).toBeTruthy();
@@ -238,21 +236,21 @@ describe("importing accounts", () => {
     expect(saves()[0].text).toBe("a@x.com:p\r\nb@x.com:p\r\n");
   });
 
-  it("checks for duplicates against the file on disk at the time of the import", async () => {
+  it("appends to the file as it is on disk at the time of the import", async () => {
     const { disk, saves } = backend({ [`${ACC}\\g.txt`]: "a@x.com:p\r\n" });
     await openGroup("g");
     paste("b@x.com:p\nc@x.com:p");
     // Changed outside the app after it was opened.
     disk.set(`${ACC}\\g.txt`, "a@x.com:p\r\nb@x.com:p\r\n");
     fireEvent.click(screen.getByRole("button", { name: "Add 2 accounts" }));
-    expect(await screen.findByText(/Added 1 account to g. Skipped 1./)).toBeTruthy();
-    expect(saves()[0].text).toBe("a@x.com:p\r\nb@x.com:p\r\nc@x.com:p\r\n");
+    expect(await screen.findByText("Added 2 accounts to g. The previous version was backed up.")).toBeTruthy();
+    expect(saves()[0].text).toBe("a@x.com:p\r\nb@x.com:p\r\nb@x.com:p\r\nc@x.com:p\r\n");
   });
 
-  it("can't add when there's nothing new", async () => {
+  it("can't add when no line is in the format", async () => {
     const { saves } = backend({ [`${ACC}\\popmart.txt`]: POPMART });
     await openGroup("popmart");
-    paste("a.one@gmail.com:x\nbroken");
+    paste("broken\na:b:c");
     const add = screen.getByRole("button", { name: "Add 0 accounts" }) as HTMLButtonElement;
     expect(add.disabled).toBe(true);
     expect(saves()).toEqual([]);
@@ -267,7 +265,7 @@ describe("importing accounts", () => {
     await waitFor(() =>
       expect((screen.getByLabelText("Accounts to import") as HTMLTextAreaElement).value.replace(/\r\n/g, "\n")).toBe("z@x.com:p\nb@x.com:p\nc@x.com:p\n"),
     );
-    expect(screen.getByRole("status").textContent).toBe("3 new accounts");
+    expect(screen.getByRole("status").textContent).toBe("3 accounts to add");
   });
 
   it("does nothing when the file picker is cancelled", async () => {

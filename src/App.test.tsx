@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { mockIPC } from "@tauri-apps/api/mocks";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import App from "./App";
@@ -234,7 +234,7 @@ describe("backups", () => {
     render(<App />);
     await openAccountFile();
 
-    const rows = await screen.findAllByRole("row");
+    const rows = await within(await screen.findByRole("region", { name: "Backups" })).findAllByRole("row");
     // header + 2 backups
     expect(rows).toHaveLength(3);
     expect(rows[1].textContent).toContain(formatDateTime(BACKUPS[0].createdMs));

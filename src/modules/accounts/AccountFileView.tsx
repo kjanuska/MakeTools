@@ -54,16 +54,16 @@ export function AccountFileView({ file, onBack, onChanged }: Props) {
     setError(null);
     setMessage(null);
     try {
-      // Plan against the file as it is on disk now, so nothing is lost or duplicated.
+      // Append to the file as it is on disk now, so nothing changed since is lost.
       const { text } = await readText(file.path);
       const current = parseAccounts(text);
-      const plan = planImport(pasted, accountsOf(current).map((a) => a.email));
+      const plan = planImport(pasted);
       if (plan.add.length === 0) {
-        setError("Nothing to add: every account is already in the file or invalid.");
+        setError("Nothing to add: no line is in the account format.");
         return false;
       }
       await saveText(file.path, appendLines(text, plan.add.map((a) => a.text)));
-      const skipped = plan.duplicates.length + plan.invalid.length;
+      const skipped = plan.invalid.length;
       setMessage(
         `Added ${plural(plan.add.length, "account")} to ${name}.${skipped ? ` Skipped ${skipped}.` : ""} The previous version was backed up.`,
       );
@@ -153,7 +153,6 @@ export function AccountFileView({ file, onBack, onChanged }: Props) {
 
       {importing && (
         <ImportPanel
-          existingEmails={accountsOf(doc).map((a) => a.email)}
           busy={busy}
           onImport={importAccounts}
           onClose={() => setImporting(false)}

@@ -39,11 +39,18 @@ describe("parseAccounts", () => {
     expect(oddLines(doc).map((l) => l.line)).toEqual([3, 4]);
   });
 
-  it("treats bad ports, empty passwords and emails without @ as odd lines", () => {
-    const doc = parseAccounts(
-      ["a@x.com:", "ax.com:pw", "a@x.com:pw:h:0", "a@x.com:pw:h:70000", "a@x.com:pw:h:80a", "a@x.com:pw::80", "a@x.com:pw:h:80::p"].join("\n"),
-    );
+  it("only checks the number of parts, not the values", () => {
+    const lines = ["a@x.com:", ":", "ax.com:pw", "a b:pw:h:0", "a@x.com:pw:h:70000", "a@x.com:pw::80a", ":::::"];
+    const doc = parseAccounts(lines.join("\n"));
+    expect(oddLines(doc)).toEqual([]);
+    expect(accountsOf(doc)[3]).toEqual({ email: "a b", password: "pw", proxyHost: "h", proxyPort: "0" });
+    expect(accountsOf(doc)[6]).toEqual({ email: "", password: "", proxyHost: "", proxyPort: "", proxyUser: "", proxyPass: "" });
+  });
+
+  it("treats lines with 1, 3, 5 or 7+ parts as odd lines", () => {
+    const doc = parseAccounts(["justtext", "a:b:c", "a:b:c:d:e", "a:b:c:d:e:f:g"].join("\n"));
     expect(accountsOf(doc)).toEqual([]);
+    expect(oddLines(doc)).toHaveLength(4);
   });
 
   it("handles an empty file, a BOM, LF and a missing trailing newline", () => {
@@ -62,41 +69,35 @@ describe("parseAccounts", () => {
 });
 
 describe("planImport", () => {
-  it("adds valid lines, trimmed, in order", () => {
-    const plan = planImport("  a@x.com:pw  \r\n\r\nb@x.com:pw:1.2.3.4:80:u:p\r\n", []);
+  it("adds lines exactly as pasted, in order, skipping blank ones", () => {
+    const plan = planImport("  a@x.com:pw  \r\n\r\n   \nb@x.com:pw:1.2.3.4:80:u:p\r\n");
     expect(plan.add.map((a) => [a.line, a.text])).toEqual([
-      [1, "a@x.com:pw"],
-      [3, "b@x.com:pw:1.2.3.4:80:u:p"],
+      [1, "  a@x.com:pw  "],
+      [4, "b@x.com:pw:1.2.3.4:80:u:p"],
     ]);
-    expect(plan.duplicates).toEqual([]);
     expect(plan.invalid).toEqual([]);
   });
 
-  it("skips emails already in the file or earlier in the paste, ignoring case", () => {
-    const plan = planImport("A@x.com:new\nb@x.com:1\nB@X.com:2\nc@x.com:3", ["a@x.com"]);
-    expect(plan.add.map((a) => a.account.email)).toEqual(["b@x.com", "c@x.com"]);
-    expect(plan.duplicates).toEqual([
-      { line: 1, email: "A@x.com", inFile: true },
-      { line: 3, email: "B@X.com", inFile: false },
-    ]);
+  it("keeps repeated emails and any values: no deduplication or value checks", () => {
+    const plan = planImport("a@x.com:1\nA@X.com:2\na@x.com:1\nnot-an-email:\nx:y:host:port");
+    expect(plan.add.map((a) => a.text)).toEqual(["a@x.com:1", "A@X.com:2", "a@x.com:1", "not-an-email:", "x:y:host:port"]);
+    expect(plan.invalid).toEqual([]);
   });
 
-  it("lists invalid lines with a reason", () => {
-    const plan = planImport("justtext\na@x.com:pw:host\nax.com:pw\na@x.com:\na@x.com:pw:h:99999\na@x.com:pw:h:80:u:\na b@x.com:pw", []);
-    expect(plan.add).toEqual([]);
-    expect(plan.invalid.map((i) => [i.line, i.reason])).toEqual([
-      [1, "Expected email:password, optionally followed by :host:port and :user:pass (found 1 part)."],
-      [2, "Expected email:password, optionally followed by :host:port and :user:pass (found 3 parts)."],
-      [3, "The email has no @."],
-      [4, "The password is empty."],
-      [5, "The proxy port must be a number from 1 to 65535."],
-      [6, "The proxy user and password can't be empty."],
-      [7, "The email contains a space."],
+  it("lists lines without 2, 4 or 6 parts, with a reason", () => {
+    const plan = planImport("justtext\na@x.com:pw:host\nok@x.com:pw\na:b:c:d:e\na:b:c:d:e:f:g");
+    expect(plan.add.map((a) => a.line)).toEqual([3]);
+    const reason = (n: number) => `Expected email:password, optionally followed by :host:port and :user:pass (found ${n} ${n === 1 ? "part" : "parts"}).`;
+    expect(plan.invalid.map((i) => [i.line, i.text, i.reason])).toEqual([
+      [1, "justtext", reason(1)],
+      [2, "a@x.com:pw:host", reason(3)],
+      [4, "a:b:c:d:e", reason(5)],
+      [5, "a:b:c:d:e:f:g", reason(7)],
     ]);
   });
 
   it("ignores a BOM at the start of a pasted file", () => {
-    expect(planImport("\uFEFFa@x.com:pw\n", []).add.map((a) => a.text)).toEqual(["a@x.com:pw"]);
+    expect(planImport("﻿a@x.com:pw\n").add.map((a) => a.text)).toEqual(["a@x.com:pw"]);
   });
 });
 

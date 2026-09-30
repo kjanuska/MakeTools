@@ -1,5 +1,6 @@
 // Paste (or load a .txt file of) accounts in the account-file format and add
-// them to the end of the file. Duplicates and invalid lines are listed and skipped.
+// them to the end of the file exactly as written. Only the format (2, 4 or 6
+// colon-separated parts) is checked; lines that don't fit are listed and skipped.
 import { useState } from "react";
 import { pickTextFile } from "../../lib/dialogs";
 import { planImport } from "../../lib/formats/accounts";
@@ -7,7 +8,6 @@ import { readText } from "../../lib/fs";
 import { plural } from "./stats";
 
 interface Props {
-  existingEmails: readonly string[];
   busy: boolean;
   /** Adds the pasted text's new accounts. Resolves true once saved. */
   onImport: (pasted: string) => Promise<boolean>;
@@ -16,10 +16,10 @@ interface Props {
 
 const SHOWN = 50;
 
-export function ImportPanel({ existingEmails, busy, onImport, onClose }: Props) {
+export function ImportPanel({ busy, onImport, onClose }: Props) {
   const [text, setText] = useState("");
   const [error, setError] = useState<string | null>(null);
-  const plan = planImport(text, existingEmails);
+  const plan = planImport(text);
 
   async function loadFile() {
     setError(null);
@@ -49,7 +49,7 @@ export function ImportPanel({ existingEmails, busy, onImport, onClose }: Props) 
       </div>
       <p className="muted">
         One account per line, same as the account files: <code>email:password</code>, optionally followed by{" "}
-        <code>:host:port</code> and <code>:user:pass</code> for a proxy. New accounts are added to the end of the file.
+        <code>:host:port</code> and <code>:user:pass</code> for a proxy. Lines are added to the end of the file exactly as written.
       </p>
       <textarea
         aria-label="Accounts to import"
@@ -63,13 +63,12 @@ export function ImportPanel({ existingEmails, busy, onImport, onClose }: Props) 
       {text.trim() !== "" && (
         <>
           <p className="accounts-import-summary" role="status">
-            <strong>{plural(plan.add.length, "new account")}</strong>
-            {plan.duplicates.length > 0 && <span> · {plural(plan.duplicates.length, "duplicate")} skipped</span>}
-            {plan.invalid.length > 0 && <span className="error"> · {plural(plan.invalid.length, "invalid line")} skipped</span>}
+            <strong>{plural(plan.add.length, "account")} to add</strong>
+            {plan.invalid.length > 0 && <span className="error"> · {plural(plan.invalid.length, "line")} not in the format, skipped</span>}
           </p>
           {plan.invalid.length > 0 && (
             <details className="accounts-issues" open>
-              <summary>Invalid lines</summary>
+              <summary>Lines not in the account format</summary>
               <ul>
                 {plan.invalid.slice(0, SHOWN).map((i) => (
                   <li key={i.line}>
@@ -77,19 +76,6 @@ export function ImportPanel({ existingEmails, busy, onImport, onClose }: Props) 
                   </li>
                 ))}
                 {plan.invalid.length > SHOWN && <li className="muted">…and {plan.invalid.length - SHOWN} more</li>}
-              </ul>
-            </details>
-          )}
-          {plan.duplicates.length > 0 && (
-            <details className="accounts-issues">
-              <summary>Duplicates</summary>
-              <ul>
-                {plan.duplicates.slice(0, SHOWN).map((d) => (
-                  <li key={d.line}>
-                    Line {d.line}: {d.email} — {d.inFile ? "already in this file" : "earlier in the import"}
-                  </li>
-                ))}
-                {plan.duplicates.length > SHOWN && <li className="muted">…and {plan.duplicates.length - SHOWN} more</li>}
               </ul>
             </details>
           )}

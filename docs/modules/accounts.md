@@ -9,17 +9,16 @@ Status: **built, awaiting user check** (2026-09-30). The user described the scop
   - `email:password`
   - `email:password:proxyHost:proxyPort`
   - `email:password:proxyHost:proxyPort:proxyUser:proxyPass`
-- A line is read as an account when it has 2, 4 or 6 parts, the email has an `@` and no spaces, the password isn't empty, the port is 1–65535, and (for 6 parts) the proxy user and password aren't empty. Any other line (including blank ones) is kept exactly as it is and listed as not in the account format.
+- A line is an account when it has 2, 4 or 6 parts. The values aren't checked: any email, password, host or port is accepted, including empty ones (user, 2026-09-30). Any other line (including blank ones) is kept exactly as it is and listed as not in the account format.
 - A password containing `:` can't be represented; such a line shows up as unrecognized.
 
 ## Operations
 - **View** a group: summary cards (accounts, with/without a proxy, email domains), a table with line number, email, password, proxy `host:port`, and the proxy user and password (those two columns appear only when some account has them). Passwords aren't hidden. Clicking a value selects it for copying.
 - **Search** by email, proxy host or proxy user, and filter by All / With proxy / Without proxy.
-- **Import**: paste lines, or load a `.txt` file (added to what's already pasted). The preview counts new accounts, duplicates and invalid lines, and lists the last two with line numbers and reasons.
-  - Blank lines are ignored and spaces around a line are trimmed.
-  - Duplicates (by email, ignoring case) of an account already in the file, or earlier in the import, are skipped.
-  - Invalid lines are skipped.
-  - "Add N accounts" appends the new lines to the end of the file through `save_text` (backup first). It saves right away and isn't staged. It re-reads the file first, so duplicates are checked against what's on disk at that moment.
+- **Import**: paste lines, or load a `.txt` file (added to what's already pasted). The preview counts the accounts to add and lists lines not in the format with their line numbers and part counts.
+  - Only parsing, no other checks (user, 2026-09-30): there's no deduplication, and lines are added exactly as pasted, without trimming.
+  - Blank lines are ignored. Lines without 2, 4 or 6 parts are skipped.
+  - "Add N accounts" appends the lines to the end of the file through `save_text` (backup first). It saves right away and isn't staged. It re-reads the file first, so changes made on disk since the page was opened are kept.
   - Existing bytes are never changed. New lines use the file's most common line ending (CRLF for an empty file or a tie), and a missing final line ending is added before them.
   - Newly added rows are highlighted until the page is left.
 - **Overview**: every group with accounts, accounts with a proxy, main email domain and status (OK / N unrecognized lines / Couldn't read), plus totals. **New account group** creates an empty `<name>.txt` (`create_file`, never overwrites). The name rules are the same as for profile groups.
@@ -33,8 +32,11 @@ Editing or deleting single accounts, renaming, copying or deleting groups, movin
 - `src/modules/accounts/`: `AccountsOverview`, `AccountFileView`, `ImportPanel` and `stats.ts`. Styles are in `accounts.css`.
 - `lib/table/fileNames.ts` helpers take an optional extension (default `.csv`) so account groups use `.txt`.
 - `pickTextFile` has been added to `lib/dialogs.ts`.
-- Tests: format unit tests (the three line shapes, odd lines, BOM, LF/CRLF/tie, missing trailing newline, empty file, non-ASCII, symbols in passwords, import planning and appending), UI tests (overview, create, table, filters, import, loading from a file, on-disk duplicate check, save failure), and real-file tests (every line of the real files parses as an account, and appending keeps every existing byte).
+- Tests: format unit tests (the three line shapes, part-count-only checks, odd lines, BOM, LF/CRLF/tie, missing trailing newline, empty file, non-ASCII, symbols in passwords, import planning and appending), UI tests (overview, create, table, filters, import, loading from a file, appending to the current on-disk file, save failure), and real-file tests (every line of the real files parses as an account, and appending keeps every existing byte).
+
+## Decisions
+- Parts 3–6 are the proxy host, port, user and password (confirmed by the user, 2026-09-30).
+- Import doesn't deduplicate or check values, only the line format (user, 2026-09-30).
 
 ## Open questions
-- Is the reading of parts 3–6 as proxy host, port, user and password right? It was inferred from `example.txt`.
-- Should duplicates be checked across all account groups, not just the one being imported into?
+None.
