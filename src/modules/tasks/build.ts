@@ -398,8 +398,9 @@ export function inferPlan(rows: readonly (readonly string[])[], ctx: TaskContext
       );
       const worst = Math.max(...off);
       if (worst === 0) break;
-      // Take out the input furthest from the default, then try again.
-      shared = shared.filter((_, s) => s !== off.indexOf(worst));
+      // Take out the input furthest from the default, then try again. On a
+      // tie the later input goes, so earlier inputs keep the default.
+      shared = shared.filter((_, s) => s !== off.lastIndexOf(worst));
     }
     inputList.forEach((_, k) => {
       if (!shared.includes(k)) inputs[k].overrides[f] = toSplit(actual[k], inputCounts[k]);

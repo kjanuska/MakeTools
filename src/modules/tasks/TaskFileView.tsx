@@ -11,7 +11,7 @@ import { useShortcutsRef, type ActionId } from "../../lib/shortcuts";
 import { isRecord, replaceRecords } from "../../lib/table/ops";
 import { useStoreVersion, type ConfirmOverwrite, type TableStore } from "../../lib/table/store";
 import { BreakdownView } from "./BreakdownView";
-import { breakdown, inferPlan } from "./build";
+import { breakdown, inferPlan, type BuildPlan } from "./build";
 import type { TaskContext } from "./schema";
 import { TaskBuilder } from "./TaskBuilder";
 
@@ -40,6 +40,14 @@ function docVersion(doc: object): number {
 
 /** The view each file was last shown in, so coming back to a file (e.g. from Settings) keeps it. */
 const lastView = new Map<string, View>();
+
+/**
+ * The last plan applied to each file, with the rows it gave. While the file
+ * still has exactly those rows, the builder shows that plan as the user left
+ * it: a file only holds counts, so reading it back can't always tell which
+ * input had a custom split.
+ */
+const appliedPlans = new Map<string, { plan: BuildPlan; rows: string }>();
 
 const VIEWS: [View, string][] = [
   ["tasks", "Tasks"],
@@ -73,7 +81,10 @@ export function TaskFileView(props: Props) {
   const ctx = store.getContext();
   const records = useMemo(() => entry?.doc.rows.filter(isRecord).map((r) => r.values) ?? [], [entry?.doc]);
   const summary = useMemo(() => breakdown(records, ctx), [records, ctx]);
-  const plan = useMemo(() => inferPlan(records, ctx), [records, ctx]);
+  const plan = useMemo(() => {
+    const applied = appliedPlans.get(file.path);
+    return applied && applied.rows === JSON.stringify(records) ? applied.plan : inferPlan(records, ctx);
+  }, [records, ctx, file.path]);
 
   const tabs = (
     <div className="view-tabs" role="tablist" aria-label="View">
@@ -176,7 +187,8 @@ export function TaskFileView(props: Props) {
           ui={ui}
           before={summary}
           onReset={() => setResets((n) => n + 1)}
-          onApply={(rows) => {
+          onApply={(rows, applied) => {
+            appliedPlans.set(file.path, { plan: applied, rows: JSON.stringify(rows) });
             store.update(file.path, (d) => replaceRecords(d, rows));
             setStatus(`Applied: ${rows.length} ${rows.length === 1 ? "task" : "tasks"}. Save to write the file.`);
           }}

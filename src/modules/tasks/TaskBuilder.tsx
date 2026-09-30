@@ -30,7 +30,8 @@ interface Props {
   ui: TableUI<TaskContext>;
   /** The file's counts now. */
   before: Breakdown;
-  onApply: (rows: string[][]) => void;
+  /** The generated rows, and the plan they came from. */
+  onApply: (rows: string[][], plan: BuildPlan) => void;
   /** Start again from the file's counts. */
   onReset: () => void;
 }
@@ -458,7 +459,7 @@ export function TaskBuilder({ initial, ctx, ui, before, onApply, onReset }: Prop
         </section>
 
         <div className="toolbar builder-actions">
-          <button className="primary" disabled={!rows || !changed} onClick={() => rows && onApply(rows)}>
+          <button className="primary" disabled={!rows || !changed} onClick={() => rows && onApply(rows, plan)}>
             Apply to file
           </button>
           <button disabled={plan === initial} onClick={onReset}>

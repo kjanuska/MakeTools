@@ -185,6 +185,7 @@ The user doesn't edit tasks one row at a time. They think of a task file as a **
   - "Apply to file" is enabled when the build differs from the file, and makes the change unsaved.
   - "Reset to file" goes back to the file's counts.
   - The builder starts again from the file whenever its rows change (apply, discard or restore).
+  - **Applied plans are remembered** for the session. While a file still has exactly the rows a build produced, the builder shows that plan as it was left, custom splits included. A file only holds counts, so reading it back can't always tell which input had the custom split (for example, two equal inputs on different sites). After a restart, or once the rows change (discard, restore, hand edits), the builder reads the file again. On a tie, the earlier input keeps the defaults and the later one gets the custom split. (Fix from the third check on 2026-09-30: after Apply and Save, a custom split per keyword wasn't shown any more.)
   - "Add site…" isn't offered in the builder. Sites are added in the grid or in Settings.
 - **Views:** a file opens on Tasks, or on Raw rows when opened from the overview search. The last view is remembered per file for the session.
 - **Tests:** 809 frontend and 42 Rust.

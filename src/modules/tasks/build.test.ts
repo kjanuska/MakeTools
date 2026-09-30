@@ -347,6 +347,18 @@ describe("inferPlan", () => {
     }
   });
 
+  it("on a tie, the later input gets the custom split and earlier ones keep the default", () => {
+    const p = basePlan();
+    p.groups = [{ profileGroup: "solo", counts: [{ profileName: "main", count: 10 }] }];
+    p.inputs = [
+      { input: "keyword1", percent: 50, overrides: {} },
+      { input: "keyword2", percent: 50, overrides: { site: one("shop.topps.com") } },
+    ];
+    const inferred = inferPlan(generateRows(p), CTX);
+    expect(inferred.defaults.site).toEqual(one("kith.com"));
+    expect(inferred.inputs.map((i) => i.overrides)).toEqual([{}, { site: one("shop.topps.com") }]);
+  });
+
   it("regenerating an inferred plan gives the same rows", () => {
     const rows = generateRows(userPlan());
     expect(generateRows(inferPlan(rows, CTX))).toEqual(rows);
