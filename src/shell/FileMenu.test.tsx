@@ -1,14 +1,15 @@
 import { mockIPC } from "@tauri-apps/api/mocks";
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import App from "../../App";
-import { confirmAction, showMessage } from "../../lib/dialogs";
-import type { FileEntry } from "../../lib/fs";
-import { getMakebotPath, getSites } from "../../lib/settings";
-import { guardWindowClose } from "../../lib/window";
-import { task, taskFile } from "../tasks/testing";
+import App from "../App";
+import { confirmAction, showMessage } from "../lib/dialogs";
+import type { FileEntry } from "../lib/fs";
+import { getMakebotPath, getSites } from "../lib/settings";
+import { guardWindowClose } from "../lib/window";
+import { PROFILE_HEADER } from "../lib/formats/profiles";
+import { profile, task, taskFile } from "../modules/tasks/testing";
 
-vi.mock("../../lib/settings", () => ({
+vi.mock("../lib/settings", () => ({
   getMakebotPath: vi.fn(),
   setMakebotPath: vi.fn(),
   getShortcutOverrides: vi.fn(async () => ({})),
@@ -16,13 +17,13 @@ vi.mock("../../lib/settings", () => ({
   getSites: vi.fn(),
   setSites: vi.fn(async () => {}),
 }));
-vi.mock("../../lib/dialogs", () => ({
+vi.mock("../lib/dialogs", () => ({
   pickFolder: vi.fn(),
   confirmAction: vi.fn(),
   askSaveDiscardCancel: vi.fn(),
   showMessage: vi.fn(),
 }));
-vi.mock("../../lib/window", () => ({ guardWindowClose: vi.fn() }));
+vi.mock("../lib/window", () => ({ guardWindowClose: vi.fn() }));
 
 const ROOT = "C:\\Makebot";
 const P = (name: string) => `${ROOT}\\proxy\\${name}`;
@@ -32,10 +33,12 @@ const B = "10.0.0.2:3128";
 let disk: Map<string, string>;
 let writes: { cmd: string; args: Record<string, string> }[];
 
-function backend(files: Record<string, string>, tasks: Record<string, string> = {}) {
+/** Proxy files, task files, and other files by folder\\name (e.g. "profile\\25.csv"). */
+function backend(files: Record<string, string>, tasks: Record<string, string> = {}, others: Record<string, string> = {}) {
   disk = new Map([
     ...Object.entries(files).map(([n, t]): [string, string] => [P(n), t]),
     ...Object.entries(tasks).map(([n, t]): [string, string] => [`${ROOT}\\task\\${n}`, t]),
+    ...Object.entries(others).map(([n, t]): [string, string] => [`${ROOT}\\${n}`, t]),
   ]);
   writes = [];
   mockIPC((cmd, a) => {
@@ -118,13 +121,24 @@ describe("proxy file right-click menu", () => {
     expect(screen.queryByRole("menu")).toBeNull();
   });
 
-  it("only proxy files have it", async () => {
-    backend({ "wealth.txt": A }, { "t.csv": taskFile([task()]) });
+  it("every module's files have it", async () => {
+    backend({ "wealth.txt": A }, { "t.csv": taskFile([task()]) }, {
+      "account\\example.txt": "a@example.com:pw\r\n",
+      "profile\\25.csv": `${PROFILE_HEADER}\r\n${profile("1")}\r\n`,
+    });
     render(<App />);
-    fireEvent.click(await screen.findByRole("button", { name: "Tasks" }));
-    const btn = await files().findByRole("button", { name: /^t\.csv/ });
-    fireEvent.contextMenu(btn);
-    expect(screen.queryByRole("menu")).toBeNull();
+    for (const [module, file] of [
+      ["Accounts", "example.txt"],
+      ["Profiles", "25.csv"],
+      ["Proxies", "wealth.txt"],
+      ["Tasks", "t.csv"],
+    ]) {
+      fireEvent.click(await screen.findByRole("button", { name: module }));
+      await files().findByRole("button", { name: new RegExp(`^${file.replace(".", "\\.")}`) });
+      const menu = rightClick(file);
+      expect(within(menu).getAllByRole("menuitem").map((b) => b.textContent)).toEqual(["Duplicate", "Rename…", "Delete…"]);
+      fireEvent.keyDown(menu, { key: "Escape" });
+    }
   });
 
   it("is disabled while the file has unsaved changes", async () => {
@@ -291,5 +305,107 @@ describe("delete", () => {
     await waitFor(() => expect(confirmAction).toHaveBeenCalled());
     expect(writes).toEqual([]);
     expect(fileNames()).toEqual(["wealth.txt"]);
+  });
+});
+
+describe("other modules", () => {
+  const names = (ext: string) =>
+    files()
+      .queryAllByRole("button", { name: new RegExp(`\\${ext}`) })
+      .map((b) => b.querySelector("span")!.firstChild!.textContent);
+
+  async function show(module: string, file: string) {
+    render(<App />);
+    fireEvent.click(await screen.findByRole("button", { name: module }));
+    await files().findByRole("button", { name: new RegExp(`^${file.replace(".", "\\.")}`) });
+  }
+
+  async function renameTo(file: string, name: string) {
+    rightClick(file);
+    fireEvent.click(menuItem("Rename…"));
+    const input = await screen.findByRole("textbox", { name: "New name" });
+    fireEvent.change(input, { target: { value: name } });
+    fireEvent.keyDown(input, { key: "Enter" });
+  }
+
+  const PROFILES = `${PROFILE_HEADER}\r\n${profile("1")}\r\n${profile("2")}\r\n`;
+
+  it("profiles: duplicate copies the group's bytes to '<name> copy.csv'", async () => {
+    backend({}, {}, { "profile\\25.csv": PROFILES });
+    await show("Profiles", "25.csv");
+    rightClick("25.csv");
+    fireEvent.click(menuItem("Duplicate"));
+    await waitFor(() => expect(names(".csv")).toEqual(["25 copy.csv", "25.csv"]));
+    expect(disk.get(`${ROOT}\\profile\\25 copy.csv`)).toBe(PROFILES);
+  });
+
+  it("profiles: rename warns about tasks using the profile group", async () => {
+    backend({}, { "a.csv": taskFile([task(), task({ group: "5" })]) }, { "profile\\25.csv": PROFILES });
+    await show("Profiles", "25.csv");
+    await renameTo("25.csv", "26");
+    await waitFor(() => expect(names(".csv")).toEqual(["26.csv"]));
+    expect(lastConfirm()).toContain("Rename profile group 25 to 26?");
+    expect(lastConfirm()).toContain('1 task in 1 task file uses "25" as the profile group');
+    expect(writes).toEqual([
+      { cmd: "rename_file", args: { from: `${ROOT}\\profile\\25.csv`, to: `${ROOT}\\profile\\26.csv` } },
+    ]);
+  });
+
+  it("profiles: delete says how many profiles", async () => {
+    backend({}, {}, { "profile\\25.csv": PROFILES });
+    await show("Profiles", "25.csv");
+    rightClick("25.csv");
+    fireEvent.click(menuItem("Delete…"));
+    await waitFor(() => expect(names(".csv")).toEqual([]));
+    expect(lastConfirm()).toContain("Delete profile group 25 (2 profiles)?");
+  });
+
+  it("tasks: delete says how many rows, with no task warning, and closes the open file", async () => {
+    backend({}, { "a.csv": taskFile([task(), task()]), "b.csv": taskFile([task()]) });
+    await show("Tasks", "a.csv");
+    fireEvent.click(files().getByRole("button", { name: /^a\.csv/ }));
+    await screen.findByRole("heading", { name: "a.csv" });
+    rightClick("a.csv");
+    fireEvent.click(menuItem("Delete…"));
+    await waitFor(() => expect(names(".csv")).toEqual(["b.csv"]));
+    expect(lastConfirm()).toContain("Delete task file a (2 rows)?");
+    expect(lastConfirm()).not.toContain("uses");
+    expect(screen.queryByRole("heading", { name: "a.csv" })).toBeNull();
+  });
+
+  it("tasks: rename keeps the open file open under its new name", async () => {
+    backend({}, { "a.csv": taskFile([task()]) });
+    await show("Tasks", "a.csv");
+    fireEvent.click(files().getByRole("button", { name: /^a\.csv/ }));
+    await screen.findByRole("heading", { name: "a.csv" });
+    await renameTo("a.csv", "drop");
+    expect(await screen.findByRole("heading", { name: "drop.csv" })).toBeTruthy();
+    expect(disk.has(`${ROOT}\\task\\drop.csv`)).toBe(true);
+  });
+
+  it("accounts: rename warns about tasks using the account group; delete counts accounts", async () => {
+    backend(
+      {},
+      { "a.csv": taskFile([task(), task()]) },
+      { "account\\example.txt": "a@example.com:pw\r\nb@example.com:pw\r\n" },
+    );
+    await show("Accounts", "example.txt");
+    await renameTo("example.txt", "main");
+    await waitFor(() => expect(names(".txt")).toEqual(["main.txt"]));
+    expect(lastConfirm()).toContain("Rename account file example to main?");
+    expect(lastConfirm()).toContain('2 tasks in 1 task file use "example" as the account group');
+    rightClick("main.txt");
+    fireEvent.click(menuItem("Delete…"));
+    await waitFor(() => expect(names(".txt")).toEqual([]));
+    expect(lastConfirm()).toContain("Delete account file main (2 accounts)?");
+  });
+
+  it("accounts: duplicate copies the bytes exactly", async () => {
+    const text = "a@example.com:pw\nodd line\r\n";
+    backend({}, {}, { "account\\example.txt": text });
+    await show("Accounts", "example.txt");
+    rightClick("example.txt");
+    fireEvent.click(menuItem("Duplicate"));
+    await waitFor(() => expect(disk.get(`${ROOT}\\account\\example copy.txt`)).toBe(text));
   });
 });

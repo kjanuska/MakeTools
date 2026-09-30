@@ -34,16 +34,17 @@ import { confirmOverwrite } from "./modules/profiles/prompts";
 import { ProfileStore } from "./modules/profiles/store";
 import { ProxyFileView } from "./modules/proxies/ProxyFileView";
 import { ProxyStore } from "./modules/proxies/store";
-import { useProxyFileMenu } from "./modules/proxies/useProxyFileMenu";
 import { buildTaskContext, contextKey } from "./modules/tasks/context";
 import { renameSiteEverywhere, siteUsage, usedSites } from "./modules/tasks/sites";
 import { TaskStore } from "./modules/tasks/store";
 import { makeTaskUI } from "./modules/tasks/ui";
 import { ChangesPanel } from "./shell/ChangesPanel";
+import { fileMenuConfigs } from "./shell/fileMenus";
 import { FileList } from "./shell/FileList";
 import { FilePanel } from "./shell/FilePanel";
 import { SettingsPage } from "./shell/SettingsPage";
 import { SitesSettings } from "./shell/SitesSettings";
+import { useFileMenu } from "./shell/useFileMenu";
 import { useFolders } from "./shell/useFolders";
 
 const folderOf = (id: ModuleId) => MODULES.find((m) => m.id === id)!.folder;
@@ -269,10 +270,13 @@ export default function App() {
   }
 
   /** Clicking the current module again goes back to its overview. */
-  const proxyMenu = useProxyFileMenu({
-    dir: root ? joinPath(root, folderOf("proxies")) : "",
-    files: folders.proxies.files,
-    proxies: proxyStore,
+  const [menuConfigs] = useState(() =>
+    fileMenuConfigs({ profiles: profileStore, proxies: proxyStore, tasks: taskStore }),
+  );
+  const fileMenu = useFileMenu({
+    config: menuConfigs[moduleId],
+    dir: root ? joinPath(root, folderOf(moduleId)) : "",
+    files: folders[moduleId].files,
     tasks: taskStore,
     selectedPath: selected?.path ?? null,
     onSelectedChanged: setSelected,
@@ -280,7 +284,7 @@ export default function App() {
   });
 
   function selectModule(id: ModuleId) {
-    proxyMenu.cancelRename();
+    fileMenu.cancelRename();
     setSettingsOpen(false);
     setModuleId(id);
     setSelected(null);
@@ -481,8 +485,8 @@ export default function App() {
         selectedPath={selected?.path ?? null}
         onSelect={(f) => openFile(f)}
         onRefresh={() => setListVersion((v) => v + 1)}
-        menuFor={mod.id === "proxies" ? proxyMenu.menuFor : undefined}
-        renaming={mod.id === "proxies" ? proxyMenu.renaming : null}
+        menuFor={fileMenu.menuFor}
+        renaming={fileMenu.renaming}
         marker={
           mod.id === "proxies"
             ? (f) => (proxyStore.get(f.path)?.dirty ? { modified: true } : undefined)
