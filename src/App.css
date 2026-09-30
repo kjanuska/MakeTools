@@ -774,7 +774,7 @@ button.link {
   text-align: right;
 }
 
-/* Task file: view tabs, summary breakdown and builder (Phase 3b). */
+/* Task file: view tabs, task counts and builder (Phase 3b). */
 .view-tabs {
   display: flex;
   gap: 4px;
@@ -792,7 +792,7 @@ button.link {
 
 .breakdown-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
   gap: 16px 24px;
 }
 
@@ -819,18 +819,6 @@ button.link {
 .breakdown td {
   padding: 2px 0 2px 8px;
   white-space: nowrap;
-}
-
-.breakdown .bar-cell {
-  width: 40%;
-}
-
-.breakdown .bar {
-  display: block;
-  height: 8px;
-  min-width: 2px;
-  border-radius: 0 4px 4px 0;
-  background: var(--accent);
 }
 
 .breakdown .num {
@@ -917,4 +905,29 @@ button.link {
 .builder-errors {
   margin: 8px 0;
   padding-left: 20px;
+}
+
+/* Builder on the left, the task counts it gives on the right (stacked when narrow). */
+.task-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
+  gap: 24px;
+  align-items: start;
+}
+
+.task-layout > .task-counts {
+  position: sticky;
+  top: 0;
+  max-height: 100vh;
+  overflow: auto;
+}
+
+@media (max-width: 1100px) {
+  .task-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .task-layout > .task-counts {
+    position: static;
+    max-height: none;
+  }
 }

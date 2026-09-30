@@ -1,7 +1,7 @@
 // Task builder (spec: docs/modules/tasks.md, "3b"): profile groups with task
 // counts, inputs with a %, and a % split of values for each other field
-// (shared by every input unless an input overrides it). Shows the resulting
-// counts live; "Review" compares them with the file before applying.
+// (shared by every input unless an input overrides it). Next to it are the
+// task counts it gives, compared with the file as it is now.
 import { useEffect, useMemo, useState } from "react";
 import { Cell } from "../../components/table/cells";
 import type { CellType, TableUI } from "../../components/table/types";
@@ -26,10 +26,11 @@ interface Props {
   initial: BuildPlan;
   ctx: TaskContext;
   ui: TableUI<TaskContext>;
-  /** The file's counts now, for the review step. */
+  /** The file's counts now. */
   before: Breakdown;
   onApply: (rows: string[][]) => void;
-  onCancel: () => void;
+  /** Start again from the file's counts. */
+  onReset: () => void;
 }
 
 const NO_ROW = TASK_FIELDS.map(() => "");
@@ -100,7 +101,8 @@ function SplitEditor({
   label: string;
   onChange: (s: Split) => void;
 }) {
-  const set = (i: number, part: Partial<Split[number]>) => onChange(split.map((p, j) => (j === i ? { ...p, ...part } : p)));
+  const set = (i: number, part: Partial<Split[number]>) =>
+    onChange(split.map((p, j) => (j === i ? { ...p, ...part } : p)));
   return (
     <div className="split-editor" role="group" aria-label={label}>
       {split.map((p, i) => (
@@ -114,7 +116,11 @@ function SplitEditor({
             label={`${label} value ${i + 1}`}
             onChange={(value) => set(i, { value })}
           />
-          <NumberInput label={`${label} value ${i + 1} %`} value={p.percent} onChange={(percent) => set(i, { percent })} />
+          <NumberInput
+            label={`${label} value ${i + 1} %`}
+            value={p.percent}
+            onChange={(percent) => set(i, { percent })}
+          />
           <span className="muted">%</span>
           <button
             aria-label={`Remove ${label} value ${i + 1}`}
@@ -127,7 +133,18 @@ function SplitEditor({
       ))}
       <div className="split-foot">
         <button onClick={() => onChange([...split, { value: "", percent: 0 }])}>Add value</button>
-        <button onClick={() => onChange(split.map((p, i) => ({ ...p, percent: evenPercents(split.length)[i] })))}>Even %</button>
+        <button
+          onClick={() =>
+            onChange(
+              split.map((p, i) => ({
+                ...p,
+                percent: evenPercents(split.length)[i],
+              })),
+            )
+          }
+        >
+          Even %
+        </button>
         <SumNote percents={split.map((p) => p.percent)} />
       </div>
     </div>
@@ -153,18 +170,29 @@ function GroupEditor({
   const pickGroup = (name: string) => {
     const names = ctx.profileGroups.get(name) ?? [];
     const counts = evenCounts(Number.isFinite(total) ? total : 0, names.length);
-    onChange({ profileGroup: name, counts: names.map((profileName, i) => ({ profileName, count: counts[i] })) });
+    onChange({
+      profileGroup: name,
+      counts: names.map((profileName, i) => ({
+        profileName,
+        count: counts[i],
+      })),
+    });
   };
   const setTotal = (n: number) => {
     const counts = Number.isInteger(n) && n >= 0 ? evenCounts(n, group.counts.length) : group.counts.map(() => NaN);
-    onChange({ ...group, counts: group.counts.map((c, i) => ({ ...c, count: counts[i] })) });
+    onChange({
+      ...group,
+      counts: group.counts.map((c, i) => ({ ...c, count: counts[i] })),
+    });
   };
 
   return (
     <div className="builder-group">
       <div className="builder-row">
         <select aria-label="Profile group" value={group.profileGroup} onChange={(e) => pickGroup(e.target.value)}>
-          {!groups.includes(group.profileGroup) && <option value={group.profileGroup}>{group.profileGroup || "Pick…"}</option>}
+          {!groups.includes(group.profileGroup) && (
+            <option value={group.profileGroup}>{group.profileGroup || "Pick…"}</option>
+          )}
           {groups.map((g) => (
             <option key={g} value={g}>
               {g} ({ctx.profileGroups.get(g)?.length ?? 0} profiles)
@@ -190,7 +218,10 @@ function GroupEditor({
                 value={c.count}
                 step={1}
                 onChange={(count) =>
-                  onChange({ ...group, counts: group.counts.map((x, j) => (j === i ? { ...x, count } : x)) })
+                  onChange({
+                    ...group,
+                    counts: group.counts.map((x, j) => (j === i ? { ...x, count } : x)),
+                  })
                 }
               />
             </label>
@@ -201,10 +232,9 @@ function GroupEditor({
   );
 }
 
-export function TaskBuilder({ initial, ctx, ui, before, onApply, onCancel }: Props) {
+export function TaskBuilder({ initial, ctx, ui, before, onApply, onReset }: Props) {
   const [plan, setPlan] = useState<BuildPlan>(initial);
   const [openOverrides, setOpenOverrides] = useState<Set<number>>(new Set());
-  const [reviewing, setReviewing] = useState(false);
 
   const errors = useMemo(() => planErrors(plan, ctx), [plan, ctx]);
   const rows = useMemo(() => (errors.length ? null : generateRows(plan)), [plan, errors]);
@@ -215,178 +245,229 @@ export function TaskBuilder({ initial, ctx, ui, before, onApply, onCancel }: Pro
     const t = ui.cell(C[f]);
     return t.kind === "select" ? { ...t, add: undefined } : t;
   };
-  const update = (fn: (p: BuildPlan) => BuildPlan) => {
-    setReviewing(false);
-    setPlan(fn);
-  };
+  const update = (fn: (p: BuildPlan) => BuildPlan) => setPlan(fn);
 
   const total = planTotal(plan);
 
-  if (reviewing && rows && after) {
-    return (
-      <div className="task-builder">
-        <h3>Review</h3>
-        <p>
-          This replaces every task row in the file with {rows.length} generated {rows.length === 1 ? "row" : "rows"}. It
-          becomes an unsaved change: nothing is written until you save.
-        </p>
-        <div className="toolbar">
-          <button className="primary" onClick={() => onApply(rows)}>
-            Apply
-          </button>
-          <button onClick={() => setReviewing(false)}>Back to the builder</button>
-        </div>
-        <BreakdownView b={after} before={before} />
-      </div>
-    );
-  }
+  const changed = !!after && JSON.stringify(after) !== JSON.stringify(before);
 
   return (
-    <div className="task-builder">
-      <section>
-        <h3>Profiles</h3>
-        {plan.groups.map((g, gi) => (
-          <GroupEditor
-            key={gi}
-            group={g}
-            ctx={ctx}
-            onChange={(ng) => update((p) => ({ ...p, groups: p.groups.map((x, j) => (j === gi ? ng : x)) }))}
-            onRemove={() => update((p) => ({ ...p, groups: p.groups.filter((_, j) => j !== gi) }))}
-          />
-        ))}
-        <button onClick={() => update((p) => ({ ...p, groups: [...p.groups, { profileGroup: "", counts: [] }] }))}>
-          Add profile group
-        </button>
-        <p className="muted">{Number.isFinite(total) ? `${total} tasks in total` : ""}</p>
-      </section>
-
-      <section>
-        <h3>Inputs</h3>
-        {plan.inputs.map((input, k) => {
-          const overridden = SPLIT_FIELDS.filter((f) => input.overrides[f]);
-          const setInput = (part: Partial<typeof input>) =>
-            update((p) => ({ ...p, inputs: p.inputs.map((x, j) => (j === k ? { ...x, ...part } : x)) }));
-          const open = openOverrides.has(k);
-          return (
-            <div className="builder-input" key={k}>
-              <div className="builder-row">
-                <input
-                  aria-label={`Input ${k + 1}`}
-                  className="input-text"
-                  value={input.input}
-                  spellCheck={false}
-                  onChange={(e) => setInput({ input: e.target.value })}
-                />
-                <NumberInput label={`Input ${k + 1} %`} value={input.percent} onChange={(percent) => setInput({ percent })} />
-                <span className="muted">%</span>
-                <button
-                  aria-expanded={open}
-                  onClick={() =>
-                    setOpenOverrides((s) => {
-                      const n = new Set(s);
-                      if (!n.delete(k)) n.add(k);
-                      return n;
-                    })
-                  }
-                >
-                  {overridden.length ? `Own splits: ${overridden.join(", ")}` : "Own splits…"}
-                </button>
-                <button
-                  aria-label={`Remove input ${k + 1}`}
-                  onClick={() => update((p) => ({ ...p, inputs: p.inputs.filter((_, j) => j !== k) }))}
-                >
-                  ×
-                </button>
-              </div>
-              {open && (
-                <div className="builder-overrides">
-                  {SPLIT_FIELDS.map((f) => {
-                    const own = input.overrides[f];
-                    return (
-                      <div key={f} className="override">
-                        <label>
-                          <input
-                            type="checkbox"
-                            checked={!!own}
-                            onChange={(e) => {
-                              const overrides = { ...input.overrides };
-                              if (e.target.checked) overrides[f] = plan.defaults[f].map((p) => ({ ...p }));
-                              else delete overrides[f];
-                              setInput({ overrides });
-                            }}
-                          />{" "}
-                          Own {f} split
-                        </label>
-                        {own && (
-                          <SplitEditor
-                            field={f}
-                            split={own}
-                            ctx={ctx}
-                            type={typeOf(f)}
-                            label={`Input ${k + 1} ${f}`}
-                            onChange={(s) => setInput({ overrides: { ...input.overrides, [f]: s } })}
-                          />
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
-          );
-        })}
-        <div className="split-foot">
-          <button onClick={() => update((p) => ({ ...p, inputs: [...p.inputs, { input: "", percent: 0, overrides: {} }] }))}>
-            Add input
-          </button>
+    <div className="task-layout">
+      <div className="task-builder">
+        <section>
+          <h3>Profiles</h3>
+          {plan.groups.map((g, gi) => (
+            <GroupEditor
+              key={gi}
+              group={g}
+              ctx={ctx}
+              onChange={(ng) =>
+                update((p) => ({
+                  ...p,
+                  groups: p.groups.map((x, j) => (j === gi ? ng : x)),
+                }))
+              }
+              onRemove={() =>
+                update((p) => ({
+                  ...p,
+                  groups: p.groups.filter((_, j) => j !== gi),
+                }))
+              }
+            />
+          ))}
           <button
             onClick={() =>
-              update((p) => ({ ...p, inputs: p.inputs.map((x, i) => ({ ...x, percent: evenPercents(p.inputs.length)[i] })) }))
+              update((p) => ({
+                ...p,
+                groups: [...p.groups, { profileGroup: "", counts: [] }],
+              }))
             }
           >
-            Even %
+            Add profile group
           </button>
-          <SumNote percents={plan.inputs.map((i) => i.percent)} />
-        </div>
-      </section>
+          <p className="muted">{Number.isFinite(total) ? `${total} tasks in total` : ""}</p>
+        </section>
 
-      <section>
-        <h3>Splits for every input</h3>
-        <p className="muted">Each input uses these unless it has its own split.</p>
-        <div className="builder-splits">
-          {SPLIT_FIELDS.map((f) => (
-            <div key={f}>
-              <h4>{f}</h4>
-              <SplitEditor
-                field={f}
-                split={plan.defaults[f]}
-                ctx={ctx}
-                type={typeOf(f)}
-                label={`Default ${f}`}
-                onChange={(s) => update((p) => ({ ...p, defaults: { ...p.defaults, [f]: s } }))}
-              />
-            </div>
-          ))}
-        </div>
-      </section>
+        <section>
+          <h3>Inputs</h3>
+          {plan.inputs.map((input, k) => {
+            const overridden = SPLIT_FIELDS.filter((f) => input.overrides[f]);
+            const setInput = (part: Partial<typeof input>) =>
+              update((p) => ({
+                ...p,
+                inputs: p.inputs.map((x, j) => (j === k ? { ...x, ...part } : x)),
+              }));
+            const open = openOverrides.has(k);
+            return (
+              <div className="builder-input" key={k}>
+                <div className="builder-row">
+                  <input
+                    aria-label={`Input ${k + 1}`}
+                    className="input-text"
+                    value={input.input}
+                    spellCheck={false}
+                    onChange={(e) => setInput({ input: e.target.value })}
+                  />
+                  <NumberInput
+                    label={`Input ${k + 1} %`}
+                    value={input.percent}
+                    onChange={(percent) => setInput({ percent })}
+                  />
+                  <span className="muted">%</span>
+                  <button
+                    aria-expanded={open}
+                    onClick={() =>
+                      setOpenOverrides((s) => {
+                        const n = new Set(s);
+                        if (!n.delete(k)) n.add(k);
+                        return n;
+                      })
+                    }
+                  >
+                    {overridden.length ? `Own splits: ${overridden.join(", ")}` : "Own splits…"}
+                  </button>
+                  <button
+                    aria-label={`Remove input ${k + 1}`}
+                    onClick={() =>
+                      update((p) => ({
+                        ...p,
+                        inputs: p.inputs.filter((_, j) => j !== k),
+                      }))
+                    }
+                  >
+                    ×
+                  </button>
+                </div>
+                {open && (
+                  <div className="builder-overrides">
+                    {SPLIT_FIELDS.map((f) => {
+                      const own = input.overrides[f];
+                      return (
+                        <div key={f} className="override">
+                          <label>
+                            <input
+                              type="checkbox"
+                              checked={!!own}
+                              onChange={(e) => {
+                                const overrides = { ...input.overrides };
+                                if (e.target.checked)
+                                  overrides[f] = plan.defaults[f].map((p) => ({
+                                    ...p,
+                                  }));
+                                else delete overrides[f];
+                                setInput({ overrides });
+                              }}
+                            />{" "}
+                            Own {f} split
+                          </label>
+                          {own && (
+                            <SplitEditor
+                              field={f}
+                              split={own}
+                              ctx={ctx}
+                              type={typeOf(f)}
+                              label={`Input ${k + 1} ${f}`}
+                              onChange={(s) =>
+                                setInput({
+                                  overrides: { ...input.overrides, [f]: s },
+                                })
+                              }
+                            />
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+          <div className="split-foot">
+            <button
+              onClick={() =>
+                update((p) => ({
+                  ...p,
+                  inputs: [...p.inputs, { input: "", percent: 0, overrides: {} }],
+                }))
+              }
+            >
+              Add input
+            </button>
+            <button
+              onClick={() =>
+                update((p) => ({
+                  ...p,
+                  inputs: p.inputs.map((x, i) => ({
+                    ...x,
+                    percent: evenPercents(p.inputs.length)[i],
+                  })),
+                }))
+              }
+            >
+              Even %
+            </button>
+            <SumNote percents={plan.inputs.map((i) => i.percent)} />
+          </div>
+        </section>
 
-      <div className="toolbar builder-actions">
-        <button className="primary" disabled={!rows} onClick={() => setReviewing(true)}>
-          Review…
-        </button>
-        <button onClick={onCancel}>Cancel</button>
+        <section>
+          <h3>Splits for every input</h3>
+          <p className="muted">Each input uses these unless it has its own split.</p>
+          <div className="builder-splits">
+            {SPLIT_FIELDS.map((f) => (
+              <div key={f}>
+                <h4>{f}</h4>
+                <SplitEditor
+                  field={f}
+                  split={plan.defaults[f]}
+                  ctx={ctx}
+                  type={typeOf(f)}
+                  label={`Default ${f}`}
+                  onChange={(s) =>
+                    update((p) => ({
+                      ...p,
+                      defaults: { ...p.defaults, [f]: s },
+                    }))
+                  }
+                />
+              </div>
+            ))}
+          </div>
+        </section>
+
+        <div className="toolbar builder-actions">
+          <button className="primary" disabled={!rows || !changed} onClick={() => rows && onApply(rows)}>
+            Apply to file
+          </button>
+          <button disabled={plan === initial} onClick={onReset}>
+            Reset to file
+          </button>
+          {rows && changed && (
+            <span className="muted">
+              Replaces every task row with {rows.length} generated {rows.length === 1 ? "row" : "rows"}. Nothing is
+              written until you save.
+            </span>
+          )}
+        </div>
+        {errors.length > 0 && (
+          <ul className="error builder-errors" aria-label="Problems">
+            {errors.map((e, i) => (
+              <li key={i}>{e}</li>
+            ))}
+          </ul>
+        )}
       </div>
-      {errors.length > 0 && (
-        <ul className="error builder-errors" aria-label="Problems">
-          {errors.map((e, i) => (
-            <li key={i}>{e}</li>
-          ))}
-        </ul>
-      )}
 
-      <section>
-        <h3>Result</h3>
-        {after ? <BreakdownView b={after} /> : <p className="muted">Fix the problems above to see the result.</p>}
+      <section className="task-counts">
+        <h3>Tasks</h3>
+        {after ? (
+          <BreakdownView b={after} before={before} />
+        ) : (
+          <>
+            <p className="muted">Fix the problems to see what the build gives. The file now:</p>
+            <BreakdownView b={before} />
+          </>
+        )}
       </section>
     </div>
   );

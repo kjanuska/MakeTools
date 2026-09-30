@@ -1,5 +1,5 @@
-// A task file: its summary (tasks per group, input, proxy group, mode…), the
-// builder that regenerates it, or the raw rows in the shared table editor.
+// A task file: its task counts (per group, input, proxy group, mode…) next to
+// the builder that regenerates it, or the raw rows in the shared table editor.
 import { useEffect, useMemo, useRef, useState } from "react";
 import { BackupsMenu } from "../../components/table/BackupsMenu";
 import { TableEditor } from "../../components/table/TableEditor";
@@ -27,29 +27,41 @@ interface Props {
   highlightId?: number;
 }
 
-type View = "summary" | "builder" | "raw";
+type View = "tasks" | "raw";
+
+/** A number per doc object, so the builder can start again when the file's rows change. */
+const docIds = new WeakMap<object, number>();
+let nextDocId = 1;
+function docVersion(doc: object): number {
+  let id = docIds.get(doc);
+  if (id === undefined) docIds.set(doc, (id = nextDocId++));
+  return id;
+}
 
 /** The view each file was last shown in, so coming back to a file (e.g. from Settings) keeps it. */
 const lastView = new Map<string, View>();
 
 const VIEWS: [View, string][] = [
-  ["summary", "Summary"],
-  ["builder", "Builder"],
+  ["tasks", "Tasks"],
   ["raw", "Raw rows"],
 ];
 
 export function TaskFileView(props: Props) {
   const { file, store, ui, confirmOverwrite, onSaved, onBack, highlightId } = props;
   useStoreVersion(store);
-  const [view, setViewState] = useState<View>(
-    highlightId === undefined ? (lastView.get(file.path) ?? "summary") : "raw",
-  );
+  const [view, setViewState] = useState<View>(highlightId === undefined ? (lastView.get(file.path) ?? "tasks") : "raw");
   const setView = (v: View) => {
     lastView.set(file.path, v);
     setViewState(v);
   };
   const [backupsOpen, setBackupsOpen] = useState(false);
-  const { error, status, setStatus, saving, save, discard, restore } = useFileActions(store, file, confirmOverwrite, onSaved);
+  const [resets, setResets] = useState(0);
+  const { error, status, setStatus, saving, save, discard, restore } = useFileActions(
+    store,
+    file,
+    confirmOverwrite,
+    onSaved,
+  );
   const handlersRef = useRef<Partial<Record<ActionId, () => void>>>({});
   useShortcutsRef(handlersRef);
 
@@ -61,6 +73,7 @@ export function TaskFileView(props: Props) {
   const ctx = store.getContext();
   const records = useMemo(() => entry?.doc.rows.filter(isRecord).map((r) => r.values) ?? [], [entry?.doc]);
   const summary = useMemo(() => breakdown(records, ctx), [records, ctx]);
+  const plan = useMemo(() => inferPlan(records, ctx), [records, ctx]);
 
   const tabs = (
     <div className="view-tabs" role="tablist" aria-label="View">
@@ -113,7 +126,12 @@ export function TaskFileView(props: Props) {
         <button onClick={onBack}>← All task files</button>
         <h2>{file.name}</h2>
         <span className="spacer" />
-        <BackupsMenu file={file} open={backupsOpen} onToggle={() => setBackupsOpen((o) => !o)} onRestore={restoreBackup} />
+        <BackupsMenu
+          file={file}
+          open={backupsOpen}
+          onToggle={() => setBackupsOpen((o) => !o)}
+          onRestore={restoreBackup}
+        />
       </div>
       {tabs}
       {error && <p className="error">{error}</p>}
@@ -147,18 +165,19 @@ export function TaskFileView(props: Props) {
         </>
       )}
 
-      {view === "summary" && <BreakdownView b={summary} />}
-      {view === "builder" && !readOnly && (
+      {readOnly ? (
+        <BreakdownView b={summary} />
+      ) : (
         <TaskBuilder
-          key={`${file.path}:${ctx.ready}`}
-          initial={inferPlan(records, ctx)}
+          // Starts again from the file whenever the file's rows change (apply, discard, restore) or on Reset.
+          key={`${ctx.ready}:${docVersion(entry.doc)}:${resets}`}
+          initial={plan}
           ctx={ctx}
           ui={ui}
           before={summary}
-          onCancel={() => setView("summary")}
+          onReset={() => setResets((n) => n + 1)}
           onApply={(rows) => {
             store.update(file.path, (d) => replaceRecords(d, rows));
-            setView("summary");
             setStatus(`Applied: ${rows.length} ${rows.length === 1 ? "task" : "tasks"}. Save to write the file.`);
           }}
         />

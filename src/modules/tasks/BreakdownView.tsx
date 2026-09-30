@@ -1,6 +1,6 @@
 // Tasks per profile group, input, proxy group, mode and the other fields, as
-// rows with a count, a share and a bar. With `before`, each row shows how its
-// count changes (for the builder's review step).
+// rows with a count and a share. With `before` (the file now), each row shows
+// how its count would change.
 import { BREAKDOWN_FIELDS, type Breakdown, type BreakdownField } from "./build";
 
 export const BREAKDOWN_LABELS: Record<BreakdownField, string> = {
@@ -20,12 +20,12 @@ type Counts = { value: string; count: number }[];
 
 const share = (n: number, total: number) => (total ? `${Math.round((n * 1000) / total) / 10}%` : "–");
 
-/** Values of `after`, then values only in `before` (now 0). */
+/** With `before`: its values first (in its order, so rows don't jump around), then new ones. */
 function merged(after: Counts, before?: Counts): { value: string; count: number; was?: number }[] {
   if (!before) return after;
-  const was = new Map(before.map((c) => [c.value, c.count]));
-  const rows = after.map((c) => ({ ...c, was: was.get(c.value) ?? 0 }));
-  for (const c of before) if (!after.some((a) => a.value === c.value)) rows.push({ value: c.value, count: 0, was: c.count });
+  const now = new Map(after.map((c) => [c.value, c.count]));
+  const rows = before.map((c) => ({ value: c.value, count: now.get(c.value) ?? 0, was: c.count }));
+  for (const c of after) if (!before.some((b) => b.value === c.value)) rows.push({ ...c, was: 0 });
   return rows;
 }
 
@@ -36,9 +36,6 @@ function Rows({ counts, before, total, label }: { counts: Counts; before?: Count
         {merged(counts, before).map((c) => (
           <tr key={c.value} title={`${c.value === "" ? "(empty)" : c.value}: ${c.count} tasks (${share(c.count, total)})`}>
             <th scope="row">{c.value === "" ? <span className="muted">(empty)</span> : c.value}</th>
-            <td className="bar-cell">
-              <span className="bar" style={{ width: total ? `${(c.count * 100) / total}%` : 0 }} />
-            </td>
             <td className="num">
               {c.was !== undefined && c.was !== c.count && <span className="was">{c.was} → </span>}
               {c.count}
@@ -53,6 +50,8 @@ function Rows({ counts, before, total, label }: { counts: Counts; before?: Count
 
 export function BreakdownView({ b, before }: { b: Breakdown; before?: Breakdown }) {
   const changed = before && before.total !== b.total;
+  // Rows that can't be counted are a property of the file, not of a build.
+  const unknown = before ? before.unknownRows : b.unknownRows;
   return (
     <div className="breakdown-view">
       <p className="breakdown-total">
@@ -61,10 +60,10 @@ export function BreakdownView({ b, before }: { b: Breakdown; before?: Breakdown 
           {b.total}
         </strong>{" "}
         {b.total === 1 ? "task" : "tasks"}
-        {b.unknownRows > 0 && (
+        {unknown > 0 && (
           <span className="error">
             {" "}
-            · {b.unknownRows} {b.unknownRows === 1 ? "row" : "rows"} not counted (ALL in an unknown profile group, or no
+            · {unknown} {unknown === 1 ? "row" : "rows"} in the file not counted (ALL in an unknown profile group, or no
             profileName)
           </span>
         )}

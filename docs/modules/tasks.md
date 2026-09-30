@@ -128,7 +128,7 @@ Profiles and tasks are both unquoted CSVs with a fixed header. The CSV parser, t
 Interview on 2026-09-30. The user approved the plan the same day, which serves as approval of this section.
 
 ### Why
-The user doesn't edit tasks one row at a time. They think of a task file as a **plan**: which profiles run how many tasks, which inputs get what share, and how each input is split across proxy groups, modes and the other fields. So a task file now opens as a **summary**, and a **builder** generates the whole file from a plan. The 3a row grid is still there behind **Advanced: raw rows**.
+The user doesn't edit tasks one row at a time. They think of a task file as a **plan**: which profiles run how many tasks, which inputs get what share, and how each input is split across proxy groups, modes and the other fields. So a task file now opens on one **Tasks** view: a **builder** that generates the whole file from a plan, next to the task counts it gives. The 3a row grid is still there behind **Advanced: raw rows**.
 
 ### Decisions
 | Topic | Decision |
@@ -143,13 +143,13 @@ The user doesn't edit tasks one row at a time. They think of a task file as a **
 | Rounding | Largest remainder, so the totals are always exact. The live view shows the actual counts. |
 | Row order | **Interleaved**: profiles, inputs and values are spread through the file. |
 | Re-editing | The builder **reads the plan back from the file's rows**. Nothing is stored outside the task file. A hand-made file that isn't evenly crossed is evened out when it's rebuilt, and the confirm step shows the before and after counts. |
-| Views | A live breakdown in the builder and a summary per file. The overview across files stays as it is. |
+| Views | One **Tasks** view per file: the builder next to the task counts, with no bars. It shows the file's counts, or before → after while the build differs from the file. The overview across files stays as it is. (Changed at the first check on 2026-09-30: the summary and builder had been separate tabs, with bars.) |
 | Proxies | Only **tasks per proxy group** are shown. Proxy files aren't read. |
 
 ### Writing the file
 - Applying a build replaces the file's task rows. The header, BOM and line endings stay as they are, and unparseable lines are kept (still flagged).
 - The change is a normal **unsaved change**: it's validated, listed under Unsaved changes, and saved with a backup like any other edit.
-- A confirm step shows the counts before and after.
+- While the build differs from the file, the counts show before → after for each value.
 - The builder is disabled for read-only files (wrong header).
 
 ### Open questions (3b)
@@ -158,7 +158,7 @@ The user doesn't edit tasks one row at a time. They think of a task file as a **
 ### Build notes (3b, 2026-09-30)
 - **Code:**
   - Logic in `src/modules/tasks/build.ts`: `apportion`, `allocate`, `interleave`, `generateRows`, `inferPlan`, `breakdown`, `planErrors`.
-  - UI in `TaskFileView.tsx` (Summary / Builder / Raw rows tabs), `TaskBuilder.tsx` and `BreakdownView.tsx`.
+  - UI in `TaskFileView.tsx` (Tasks / Raw rows tabs), `TaskBuilder.tsx` (the builder with the counts beside it) and `BreakdownView.tsx`.
   - `replaceRecords` in `src/lib/table/ops.ts` writes the generated rows. Save, discard and restore-a-backup moved into `components/table/useFileActions.ts`, which the grid and the summary both use.
 - **How counts are worked out:**
   - Tasks per input = the input %s applied to the total.
@@ -167,17 +167,20 @@ The user doesn't edit tasks one row at a time. They think of a task file as a **
   - Profiles get each input's value combinations in proportion to their tasks. Rounding extras go where a profile has had too few of a value so far, so each profile's mix stays within about 1 task of its exact share.
 - **Row order:** profiles take turns (1, 2, 3, 1, 2, 3…). Each profile's tasks alternate between inputs, and within an input between value combinations.
 - **Reading a file back:** inputs share a field's default while it reproduces their counts. Otherwise the input furthest from the default gets its own split. Rebuilding from a file without changes gives the same counts per profile, per input and per input × value. This was checked on all 78 real task files.
-- **The summary:**
-  - Each field's table shows count, share and a bar. Tasks per profile are shown per group, as a share of the group.
+- **The counts:**
+  - Each field's table shows the count and share, with no bars. Rows stay in the file's order.
+  - Tasks per profile are shown per group, as a share of the group.
   - Rows that can't be counted (`ALL` in an unknown group, or an empty profileName) are flagged.
 - **The builder:**
   - Profile group: pick the group, type a total (spread evenly), and optionally set tasks per profile.
   - Each input has a % and "Own splits…" for overrides. Each field has a default split with "Add value" and "Even %".
-  - Problems are listed, and Review stays disabled until they're fixed.
-  - Review shows before → after counts, and Apply makes the change unsaved.
+  - Problems are listed, and the counts fall back to the file's until they're fixed.
+  - "Apply to file" is enabled when the build differs from the file, and makes the change unsaved.
+  - "Reset to file" goes back to the file's counts.
+  - The builder starts again from the file whenever its rows change (apply, discard or restore).
   - "Add site…" isn't offered in the builder. Sites are added in the grid or in Settings.
-- **Views:** a file opens on Summary, or on Raw rows when opened from the overview search. The last view is remembered per file for the session.
-- **Tests:** 804 frontend and 42 Rust.
+- **Views:** a file opens on Tasks, or on Raw rows when opened from the overview search. The last view is remembered per file for the session.
+- **Tests:** 806 frontend and 42 Rust.
   - Algorithm tests cover the user's examples, exact totals, evenness per profile, independence of proxy group and mode, overrides, interleaving and determinism.
   - The `inferPlan` round trip is tested, along with `replaceRecords` (BOM, CRLF, a missing trailing newline, unparseable lines), the summary and builder UI, and real-file checks for all 78 task files.
 
