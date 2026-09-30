@@ -1,8 +1,7 @@
 import { memo, useCallback, useEffect, useRef, useState, type KeyboardEvent, type MouseEvent } from "react";
-import { confirmAction } from "../../lib/dialogs";
-import { LINE_ENDING_LABELS, formatDateTime } from "../../lib/format";
+import { LINE_ENDING_LABELS } from "../../lib/format";
 import { headerOf, type DataRow, type Row } from "../../lib/formats/csvTable";
-import { readBackup, type BackupEntry, type FileEntry } from "../../lib/fs";
+import type { BackupEntry, FileEntry } from "../../lib/fs";
 import { useShortcutsRef, type ActionId } from "../../lib/shortcuts";
 import {
   addRow,
@@ -18,6 +17,7 @@ import {
 } from "../../lib/table/ops";
 import { useStoreVersion, type ConfirmOverwrite, type TableStore } from "../../lib/table/store";
 import { BackupsMenu } from "./BackupsMenu";
+import { useFileActions } from "./useFileActions";
 import { Cell } from "./cells";
 import type { CellType, TableUI } from "./types";
 
@@ -62,9 +62,12 @@ export function TableEditor<Ctx>({ file, store, ui, confirmOverwrite, onSaved, f
   const ctx = store.getContext();
   const [selection, setSelection] = useState<Selection>(EMPTY_SELECTION);
   const [panel, setPanel] = useState<Panel>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [status, setStatus] = useState<string | null>(null);
-  const [saving, setSaving] = useState(false);
+  const { error, status, setStatus, saving, save, discard, restore: stageBackup } = useFileActions(
+    store,
+    file,
+    confirmOverwrite,
+    onSaved,
+  );
   const [backupsOpen, setBackupsOpen] = useState(false);
   const [focus, setFocus] = useState<{ rowId: number; col: number } | null>(null);
   const [adding, setAdding] = useState<AddTarget | null>(null);
@@ -219,51 +222,10 @@ export function TableEditor<Ctx>({ file, store, ui, confirmOverwrite, onSaved, f
   const readOnly = !doc.headerOk;
   const nameCol = schema.nameCol;
 
-  async function save() {
-    setSaving(true);
-    setError(null);
-    setStatus(null);
-    const r = await store.save(file.path, confirmOverwrite);
-    setSaving(false);
-    if (r.ok) {
-      onSaved();
-      if (r.verified) setStatus("Saved. The previous version was backed up.");
-      else setError("Saved, but the file on disk doesn't match what was written. Check it before using it.");
-    } else if (r.reason === "error") {
-      setError(`Save failed: ${r.error}`);
-    }
-  }
-
-  async function discard() {
-    const ok = await confirmAction(`Discard all unsaved changes to ${file.name}?`, "Discard changes");
-    if (!ok) return;
-    store.discard(file.path);
-    setStatus(null);
-  }
-
   async function restore(b: BackupEntry) {
-    const when = formatDateTime(b.createdMs);
-    setError(null);
-    if (dirty) {
-      const ok = await confirmAction(
-        `Replace your unsaved changes to ${file.name} with the backup from ${when}?`,
-        "Restore backup",
-      );
-      if (!ok) return;
-    }
-    try {
-      const backup = await readBackup(file.path, b.id);
-      const r = store.stage(file.path, backup.text);
-      if (!r.ok) {
-        setError(r.error);
-        return;
-      }
-      setBackupsOpen(false);
-      setSelection(EMPTY_SELECTION);
-      setStatus(`Loaded the backup from ${when}. Save to keep it, or Discard changes to undo.`);
-    } catch (e) {
-      setError(`Couldn't read the backup: ${e}`);
-    }
+    if (!(await stageBackup(b))) return;
+    setBackupsOpen(false);
+    setSelection(EMPTY_SELECTION);
   }
 
   function finishAdd(value: string) {

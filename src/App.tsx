@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import "./App.css";
-import { TableEditor } from "./components/table/TableEditor";
 import { TableOverview } from "./components/table/TableOverview";
+import { TaskFileView } from "./modules/tasks/TaskFileView";
 import { askSaveDiscardCancel, confirmAction, pickFolder, showMessage } from "./lib/dialogs";
 import type { FileEntry } from "./lib/fs";
 import { MODULES, type ModuleId } from "./lib/modules";
@@ -343,7 +343,7 @@ export default function App() {
     );
   } else if (mod.id === "tasks") {
     main = selected ? (
-      <TableEditor
+      <TaskFileView
         key={selected.path}
         file={selected}
         store={taskStore}
