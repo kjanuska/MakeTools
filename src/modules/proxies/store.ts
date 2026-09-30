@@ -89,6 +89,13 @@ export class ProxyStore {
     return { ok: true };
   }
 
+  /** Drops a file from memory, e.g. after it was renamed or deleted. */
+  forget(path: string): void {
+    this.entries.delete(path);
+    this.loadErrors.delete(path);
+    this.changed();
+  }
+
   discard(path: string): void {
     this.update(path, () => this.entries.get(path)!.loaded.text);
   }

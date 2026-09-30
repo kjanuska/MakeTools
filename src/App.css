@@ -1176,3 +1176,68 @@ button.link {
   margin: 0;
   padding-left: 18px;
 }
+
+/* Right-click menu */
+
+.context-menu {
+  position: fixed;
+  z-index: 100;
+  min-width: 160px;
+  padding: 4px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  box-shadow: 0 6px 20px rgb(0 0 0 / 0.18);
+  display: flex;
+  flex-direction: column;
+}
+
+.context-menu button {
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  text-align: left;
+  padding: 5px 10px;
+}
+
+.context-menu button:not(:disabled):hover,
+.context-menu button:focus-visible {
+  background: var(--accent-bg);
+  outline: none;
+}
+
+.context-menu button.danger:not(:disabled) {
+  color: var(--error);
+}
+
+.context-menu button:disabled {
+  color: var(--muted);
+}
+
+.context-menu-note {
+  margin: 2px 10px 4px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+/* A file name being renamed in the file list */
+
+.file-rename {
+  padding: 2px 4px;
+}
+
+.file-rename-row {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.file-rename input {
+  flex: 1;
+  min-width: 0;
+}
+
+.file-rename .error {
+  margin: 2px 0 0;
+  font-size: 12px;
+}

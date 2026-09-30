@@ -42,8 +42,16 @@ The same as profiles and tasks:
 - Adding lines at the end keeps every existing byte of a single-ending file.
 - Shuffle keeps the file's final-newline style and drops blank lines.
 
+## File menu (added 2026-09-30 at the user's request)
+Right-clicking a proxy file in the file list (or using the menu key / Shift+F10) opens a menu:
+- **Duplicate:** creates `<name> copy.txt` right away, or `<name> copy 2.txt` and so on if taken. It's a byte-for-byte copy of the saved file, made with `create_file`, which never overwrites.
+- **Rename…:** the name becomes a text box in the list. Enter renames and Escape or clicking away cancels. Names are checked the same way as profile groups (Windows-safe, no commas, no clash). A confirmation first says how many tasks, in how many task files, use the old name as their proxy group. Those tasks aren't updated automatically, so they show an error until changed. It uses `rename_file`, which backs up first. An open file stays open under its new name.
+- **Delete…:** a confirmation shows the proxy count and the tasks that use it, and says the backup is kept for 7 days. It uses `delete_file`, which backs up first. An open file is closed.
+- All three are disabled while the file has unsaved changes ("Save or discard its changes first."), as for profile groups.
+
 ## Not included (not asked for)
-- Creating, renaming or deleting proxy files. Tasks refer to them by name, so a rename would break task files.
+- Creating new, empty proxy files.
+- Updating task files automatically when a proxy file is renamed.
 - Removing duplicates, and trimming or cleaning up lines automatically.
 
 ## Build notes (2026-09-30)
@@ -53,6 +61,11 @@ The same as profiles and tasks:
   - `useFileActions` and `useStoreVersion` now take any store with the right shape, so the proxies view reuses the Save / Discard / Backups code.
 - View: `src/modules/proxies/ProxyFileView.tsx`. With no file selected, the Proxies tab says "Select a proxy file."
 - The count uses the current text, including unsaved changes. Odd lines count toward it.
+- File menu:
+  - `src/components/ContextMenu.tsx` is a shared right-click menu (Escape, click outside, arrow keys).
+  - `FileList` takes `menuFor` and `renaming` props, so other modules can use them.
+  - The logic is in `src/modules/proxies/useProxyFileMenu.ts`, and task usage is counted in `usage.ts`.
+  - `copyName`, `copyTableFile` and `renameTableFile` take an optional extension.
 - The editor is a plain `<textarea>` (no wrapping) with a line-number gutter that scrolls with it, so it copes with the 10,000-line files.
 
 ## Open questions

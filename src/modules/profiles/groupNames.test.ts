@@ -51,4 +51,11 @@ describe("group names", () => {
     expect(copyName("25", EXISTING)).toBe("25 copy");
     expect(copyName("25", [...EXISTING, "25 copy.csv", "25 Copy 2.csv"])).toBe("25 copy 3");
   });
+
+  it("suggests a free copy name for another extension (.txt for proxies)", () => {
+    const txt = ["wealth.txt", "wealth copy.txt", "wealth copy 2.csv"];
+    expect(copyName("wealth", txt, ".txt")).toBe("wealth copy 2");
+    // A .csv file with the name doesn't clash with a .txt one, and vice versa.
+    expect(copyName("wealth", txt)).toBe("wealth copy");
+  });
 });

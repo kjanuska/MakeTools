@@ -34,10 +34,10 @@ export function groupNameError(name: string, existing: readonly string[], curren
 }
 
 /** First free "<base> copy", "<base> copy 2", ... */
-export function copyName(base: string, existing: readonly string[]): string {
+export function copyName(base: string, existing: readonly string[], ext = EXT): string {
   const taken = new Set(existing.map((e) => e.toLowerCase()));
   for (let i = 1; ; i++) {
     const name = i === 1 ? `${base} copy` : `${base} copy ${i}`;
-    if (!taken.has(fileNameFor(name).toLowerCase())) return name;
+    if (!taken.has(fileNameFor(name, ext).toLowerCase())) return name;
   }
 }
