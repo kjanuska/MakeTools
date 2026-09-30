@@ -804,57 +804,110 @@ button.link {
 }
 
 .breakdown-total {
-  margin: 8px 0 12px;
+  margin: 8px 0 4px;
+  font-size: 1.1em;
+}
+
+.breakdown-note {
+  margin: 0 0 8px;
+  font-size: 0.9em;
 }
 
 .breakdown-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
-  gap: 16px 24px;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 12px;
+  margin-top: 8px;
 }
 
-.breakdown-grid h3 {
-  margin: 0 0 4px;
-  font-size: 0.95em;
+/* Each field's counts in its own card. */
+.breakdown-card {
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  overflow: hidden;
+  background: var(--bg);
 }
 
 .breakdown {
   width: 100%;
   border-collapse: collapse;
+  table-layout: fixed;
+  font-variant-numeric: tabular-nums;
 }
 
-.breakdown th {
-  text-align: left;
-  font-weight: normal;
-  padding: 2px 8px 2px 0;
-  max-width: 180px;
+/* The number columns have the same width in every card, so they line up. */
+.breakdown .num-col {
+  width: 64px;
+}
+
+.breakdown th,
+.breakdown td {
+  padding: 3px 8px;
+  white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
-.breakdown td {
-  padding: 2px 0 2px 8px;
-  white-space: nowrap;
+.breakdown tbody th,
+.breakdown tfoot th {
+  text-align: left;
+  font-weight: normal;
+}
+
+.breakdown thead th {
+  text-align: left;
+  font-size: 0.85em;
+  font-weight: 600;
+  color: var(--muted);
+  background: var(--panel);
+  border-bottom: 1px solid var(--border);
+}
+
+.breakdown thead th:first-child {
+  color: var(--text);
+  font-size: 0.95em;
 }
 
 .breakdown .num {
   text-align: right;
-  font-variant-numeric: tabular-nums;
 }
 
-.breakdown tr:hover {
+.breakdown tbody tr + tr {
+  border-top: 1px solid var(--border);
+}
+
+.breakdown tbody tr:hover {
   background: var(--panel);
+}
+
+.breakdown tfoot tr {
+  border-top: 2px solid var(--border);
+}
+
+.breakdown tfoot th,
+.breakdown tfoot td {
+  font-weight: 600;
+}
+
+/* A count that Apply would change. */
+.breakdown .changed-num {
+  background: var(--changed-bg);
+  color: var(--changed);
+  font-weight: 600;
 }
 
 .was {
   color: var(--muted);
 }
 
+.breakdown-profiles {
+  border-top: 1px solid var(--border);
+}
+
 .breakdown-profiles summary {
   cursor: pointer;
   color: var(--muted);
-  margin: 4px 0;
+  padding: 4px 8px;
 }
 
 .task-builder section {

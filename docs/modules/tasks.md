@@ -168,7 +168,9 @@ The user doesn't edit tasks one row at a time. They think of a task file as a **
 - **Row order:** profiles take turns (1, 2, 3, 1, 2, 3…). Each profile's tasks alternate between inputs, and within an input between value combinations.
 - **Reading a file back:** inputs share a field's default while it reproduces their counts. Otherwise the input furthest from the default gets its own split. Rebuilding from a file without changes gives the same counts per profile, per input and per input × value. This was checked on all 78 real task files.
 - **The counts:**
-  - Each field's table shows the count and share, with no bars. Rows stay in the file's order.
+  - Each field has its own card with a table, and there are no bars. The columns are labelled ("Proxy Group | Tasks | Share"), rows are separated by lines, and a Total row appears when there's more than one value.
+  - The number columns have the same fixed width in every card, so they line up, and use tabular digits. Rows stay in the file's order.
+  - While a build differs from the file, the tasks column becomes **Now | New**, and each count that would change is highlighted. When nothing would change, the file's own counts are shown with a single Tasks column. (From the fourth check on 2026-09-30: the panel had no column labels, alignment or separation.)
   - Tasks per profile are shown per group, as a share of the group.
   - Rows that can't be counted (`ALL` in an unknown group, or an empty profileName) are flagged.
 - **The builder:**

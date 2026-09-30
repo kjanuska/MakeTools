@@ -35,11 +35,15 @@ const tab = (name: string) => fireEvent.click(screen.getByRole("tab", { name }))
 const status = () => screen.getByRole("status").textContent ?? "";
 const field = (label: string) => screen.getByLabelText(label) as HTMLInputElement;
 const set = (label: string, value: string) => fireEvent.change(field(label), { target: { value } });
-/** Rows of a breakdown table as [value, count, share]. */
-const table = (name: string) =>
-  within(screen.getByRole("table", { name }))
-    .getAllByRole("row")
-    .map((r) => [r.querySelector("th")!.textContent, ...[...r.querySelectorAll("td.num")].map((t) => t.textContent)]);
+/** Cells of a table row: the row's heading, then its cells. */
+const cells = (r: Element) => [...r.querySelectorAll("th, td")].map((t) => t.textContent);
+/** Body rows of a counts table as [value, tasks, share], or [value, now, new, share] while comparing. */
+const table = (name: string) => [...screen.getByRole("table", { name }).querySelectorAll("tbody tr")].map(cells);
+const headers = (name: string) => cells(screen.getByRole("table", { name }).querySelector("thead tr")!);
+const totalRow = (name: string) => {
+  const r = screen.getByRole("table", { name }).querySelector("tfoot tr");
+  return r ? cells(r) : null;
+};
 
 /** Opens a task file on its Tasks view, with the links to other folders loaded. */
 async function openFile(name: string) {
@@ -60,6 +64,12 @@ describe("task counts", () => {
     await openFile("s.csv");
     await waitFor(() => expect(document.querySelector(".breakdown-total")!.textContent).toBe("4 tasks"));
     expect(table("Profile Groups")).toEqual([["25", "4", "100%"]]);
+    // Nothing to compare: one Tasks column, labelled, with a total row when there's more than one value.
+    expect(headers("Proxy Groups")).toEqual(["Proxy Group", "Tasks", "Share"]);
+    expect(headers("Profiles in 25")).toEqual(["Profile", "Tasks", "Share"]);
+    expect(totalRow("Proxy Groups")).toEqual(["Total", "4", "100%"]);
+    expect(totalRow("Profile Groups")).toBeNull();
+    expect(screen.queryByText(/Now: the file as it is/)).toBeNull();
     expect(table("Profiles in 25")).toEqual([
       ["1", "1", "25%"],
       ["2", "2", "50%"],
@@ -143,15 +153,22 @@ describe("task builder", () => {
     expect(field("Proxy Group (all inputs) 2 %").disabled).toBe(true);
     set("Input 1", "  box   logo ");
     // The counts show how the file would change.
+    expect(headers("Proxy Groups")).toEqual(["Proxy Group", "Now", "New", "Share"]);
     expect(table("Proxy Groups")).toEqual([
-      ["wealth", "3", "50%"],
-      ["us", "0 → 3", "50%"],
+      ["wealth", "3", "3", "50%"],
+      ["us", "0", "3", "50%"],
     ]);
+    expect(totalRow("Proxy Groups")).toEqual(["Total", "3", "6", "100%"]);
+    // Only counts that change are marked.
+    const marked = [...screen.getByRole("table", { name: "Proxy Groups" }).querySelectorAll(".changed-num")];
+    expect(marked.map((c) => c.textContent)).toEqual(["3"]);
+    expect(marked[0].closest("tr")!.querySelector("th")!.textContent).toBe("us");
     expect(table("Profiles in 25")).toEqual([
-      ["1", "1 → 2", "33.3%"],
-      ["2", "1 → 2", "33.3%"],
-      ["3", "1 → 2", "33.3%"],
+      ["1", "1", "2", "33.3%"],
+      ["2", "1", "2", "33.3%"],
+      ["3", "1", "2", "33.3%"],
     ]);
+    expect(screen.getByText("Now: the file as it is. New: what Apply would give.")).toBeTruthy();
     expect(screen.getByText(/Replaces every task row with 6 generated rows/)).toBeTruthy();
     fireEvent.click(btn("Apply to file"));
     await waitFor(() => expect(status()).toContain("Applied: 6 tasks. Save to write the file."));
@@ -219,7 +236,7 @@ describe("task builder: starting again", () => {
     expect(btn("Reset to file").disabled).toBe(true);
     set("Total tasks for 25", "9");
     expect(btn("Apply to file").disabled).toBe(false);
-    expect(table("Profile Groups")).toEqual([["25", "3 → 9", "100%"]]);
+    expect(table("Profile Groups")).toEqual([["25", "3", "9", "100%"]]);
     fireEvent.click(btn("Reset to file"));
     expect(field("Total tasks for 25").value).toBe("3");
     expect(table("Profile Groups")).toEqual([["25", "3", "100%"]]);
