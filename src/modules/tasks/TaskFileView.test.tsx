@@ -219,6 +219,7 @@ describe("task builder", () => {
     fireEvent.click(screen.getAllByRole("button", { name: "Custom splits…" })[1]);
     fireEvent.click(screen.getByLabelText("Custom Site split"));
     set("Site for input 2 1", "shop.topps.com");
+    fireEvent.click(btn("Done"));
     fireEvent.click(btn("Apply to file"));
     fireEvent.click(await screen.findByRole("button", { name: "Save" }));
     await waitFor(() => expect(saves()).toHaveLength(1));
@@ -298,12 +299,13 @@ describe("task builder: after applying", () => {
     fireEvent.click(screen.getAllByRole("button", { name: "Custom splits…" })[1]);
     fireEvent.click(screen.getByLabelText("Custom Site split"));
     set("Site for input 2 1", "shop.topps.com");
+    fireEvent.click(btn("Done"));
     fireEvent.click(btn("Apply to file"));
     await waitFor(() => expect(status()).toContain("Applied"));
     /** The custom-split button of the input row with this text. */
     const customOf = (input: string) => {
       const row = screen.getAllByLabelText(/^Input \d+$/).find((el) => (el as HTMLInputElement).value === input)!;
-      return row.closest(".split-row")!.querySelector("button[aria-expanded]")!.textContent;
+      return row.closest(".split-row")!.querySelector("button[aria-haspopup]")!.textContent;
     };
     expect(customOf("cards")).toBe("Custom: Site");
     expect(customOf("box logo -tee")).toBe("Custom splits…");
@@ -319,6 +321,7 @@ describe("task builder: after applying", () => {
     await openFile("m.csv");
     fireEvent.click(screen.getAllByRole("button", { name: "Custom splits…" })[0]);
     fireEvent.click(screen.getByLabelText("Custom Mode split"));
+    fireEvent.click(btn("Done"));
     set("Total tasks for 25", "4");
     fireEvent.click(btn("Apply to file"));
     await waitFor(() => expect(status()).toContain("Applied"));
@@ -330,6 +333,7 @@ describe("task builder: after applying", () => {
     await openFile("x.csv");
     fireEvent.click(screen.getAllByRole("button", { name: "Custom splits…" })[0]);
     fireEvent.click(screen.getByLabelText("Custom Mode split"));
+    fireEvent.click(btn("Done"));
     set("Total tasks for 25", "4");
     fireEvent.click(btn("Apply to file"));
     await waitFor(() => expect(status()).toContain("Unsaved changes"));
@@ -337,5 +341,95 @@ describe("task builder: after applying", () => {
     await waitFor(() => expect(status()).not.toContain("Unsaved changes"));
     expect(screen.queryByRole("button", { name: "Custom: Mode" })).toBeNull();
     expect(field("Total tasks for 25").value).toBe("2");
+  });
+});
+
+describe("task builder: an input's splits dialog", () => {
+  const dialog = () => screen.getByRole("dialog");
+
+  it("opens as a dialog laid out like the splits for every input", async () => {
+    backend({ "d.csv": taskFile([task({ name: "1" }), task({ name: "1", input: "cards" })]) });
+    await openFile("d.csv");
+    expect(screen.queryByRole("dialog")).toBeNull();
+    fireEvent.click(screen.getAllByRole("button", { name: "Custom splits…" })[1]);
+    expect(screen.getByRole("dialog", { name: 'Splits for "cards"' })).toBeTruthy();
+    const d = within(dialog());
+    // A card per field, with the same names and hints as step 3.
+    for (const name of ["Proxy Group", "Mode", "Site", "Size", "Color", "Account Group", "Cart Quantity", "Delay (ms)"]) {
+      expect(d.getByRole("heading", { name })).toBeTruthy();
+    }
+    expect(d.getByText("Which proxy list the tasks use")).toBeTruthy();
+    // Not custom: shows the split every input uses, read-only.
+    const used = d.getByRole("table", { name: "Site (all inputs), used by input 2" });
+    expect(within(used).getAllByRole("row").map((r) => r.textContent)).toEqual(["kith.com100%"]);
+    expect(d.queryByLabelText("Site for input 2 1")).toBeNull();
+    // Custom: the same editor as step 3, starting from the default.
+    fireEvent.click(d.getByLabelText("Custom Site split"));
+    expect((d.getByLabelText("Site for input 2 1") as HTMLSelectElement).value).toBe("kith.com");
+    expect(d.getByRole("button", { name: "Add Site for input 2" })).toBeTruthy();
+    expect(d.getByLabelText("Distribute Site for input 2 evenly")).toBeTruthy();
+  });
+
+  it("edits apply as they're made; Done closes and keeps them", async () => {
+    backend({ "d.csv": taskFile([task({ name: "1" }), task({ name: "1", input: "cards" })]) });
+    await openFile("d.csv");
+    fireEvent.click(screen.getAllByRole("button", { name: "Custom splits…" })[1]);
+    fireEvent.click(screen.getByLabelText("Custom Site split"));
+    set("Site for input 2 1", "shop.topps.com");
+    // The counts beside the builder already show it.
+    expect(table("Sites")).toEqual([
+      ["kith.com", "2", "1", "50%"],
+      ["shop.topps.com", "0", "1", "50%"],
+    ]);
+    fireEvent.click(btn("Done"));
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(btn("Custom: Site")).toBeTruthy();
+  });
+
+  it("Cancel and Escape put back what was there when it opened", async () => {
+    backend({ "d.csv": taskFile([task({ name: "1" }), task({ name: "1", input: "cards" })]) });
+    await openFile("d.csv");
+    fireEvent.click(screen.getAllByRole("button", { name: "Custom splits…" })[1]);
+    fireEvent.click(screen.getByLabelText("Custom Site split"));
+    set("Site for input 2 1", "shop.topps.com");
+    fireEvent.click(btn("Cancel"));
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(screen.getAllByRole("button", { name: "Custom splits…" })).toHaveLength(2);
+    expect(btn("Apply to file").disabled).toBe(true);
+
+    fireEvent.click(screen.getAllByRole("button", { name: "Custom splits…" })[0]);
+    fireEvent.click(screen.getByLabelText("Custom Mode split"));
+    fireEvent.keyDown(dialog(), { key: "Escape" });
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(screen.getAllByRole("button", { name: "Custom splits…" })).toHaveLength(2);
+  });
+
+  it("app shortcuts don't act behind it (Ctrl+S doesn't save)", async () => {
+    const { saves } = backend({ "d.csv": taskFile([task()]) });
+    await openFile("d.csv");
+    set("Total tasks for 25", "6");
+    fireEvent.click(btn("Apply to file"));
+    await waitFor(() => expect(status()).toContain("Unsaved changes"));
+    fireEvent.click(btn("Custom splits…"));
+    fireEvent.keyDown(document.body, { key: "s", ctrlKey: true });
+    await new Promise((r) => setTimeout(r, 20));
+    expect(saves()).toHaveLength(0);
+    // Closed, the shortcut works again.
+    fireEvent.click(btn("Done"));
+    fireEvent.keyDown(document.body, { key: "s", ctrlKey: true });
+    await waitFor(() => expect(saves()).toHaveLength(1));
+  });
+
+  it("unticking a custom split goes back to the default", async () => {
+    // 3 tasks per input (ALL in group 25), so the file clearly has a custom site for "cards".
+    backend({ "d.csv": taskFile([task(), task({ input: "cards", site: "shop.topps.com" })]) });
+    await openFile("d.csv");
+    fireEvent.click(btn("Custom: Site"));
+    const box = screen.getByLabelText("Custom Site split") as HTMLInputElement;
+    expect(box.checked).toBe(true);
+    fireEvent.click(box);
+    expect(within(dialog()).getByRole("table", { name: "Site (all inputs), used by input 2" })).toBeTruthy();
+    fireEvent.click(btn("Done"));
+    expect(screen.getAllByRole("button", { name: "Custom splits…" })).toHaveLength(2);
   });
 });

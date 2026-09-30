@@ -176,7 +176,13 @@ The user doesn't edit tasks one row at a time. They think of a task file as a **
 - **The builder:**
   - The builder has three numbered steps: 1 Profiles, 2 Inputs, 3 Splits for every input. Each profile group, the inputs and each split sit in their own card.
   - **Profile groups:** pick the group, then fill in the **Total tasks** field, which is highlighted and spread evenly. Tasks can also be set per profile. The grand total is shown under the groups.
-  - **Inputs:** each input has a % and "Custom splits…" for its own splits.
+  - **Inputs:** each input has a % and a "Custom splits…" button (it reads "Custom: Site, …" once the input has some).
+  - **An input's splits dialog:** the button opens a dialog titled `Splits for "<input>"` with the same split cards as step 3.
+    - A field that isn't custom shows the split every input uses, read-only.
+    - Ticking "Custom for this input" puts the step-3 editor in the card, starting from that default. Unticking it goes back to the default.
+    - Edits apply as they're made, so the counts update behind the dialog. **Done** keeps them, and **Cancel** or Escape puts back what was there when it opened.
+    - While it's open, the app's shortcuts (Ctrl+S, back…) do nothing.
+    - (From the fifth check on 2026-09-30: this used to be an inline, condensed list under the input.)
   - **Field names:** fields show readable names such as "Proxy Group" and "Cart Quantity", with a short hint under each. The file keeps its own column names.
   - **% lists** (inputs and every split):
     - A dashed **"+"** row adds a row, and × removes one.

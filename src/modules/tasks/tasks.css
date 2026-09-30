@@ -1,0 +1,85 @@
+/* Tasks module: the dialog with one input's splits. */
+
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: rgb(0 0 0 / 45%);
+}
+
+.modal {
+  display: flex;
+  flex-direction: column;
+  width: min(1100px, 100%);
+  max-height: 100%;
+  background: var(--bg);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: 0 12px 40px rgb(0 0 0 / 35%);
+  outline: none;
+}
+
+.modal-head {
+  padding: 14px 18px 8px;
+  border-bottom: 1px solid var(--border);
+}
+
+.modal-head h3 {
+  margin: 0 0 4px;
+  font-size: 1.15em;
+}
+
+.modal-head p {
+  margin: 0;
+}
+
+/* The split cards scroll; the title and buttons stay in view. */
+.modal-body {
+  flex: 1;
+  overflow: auto;
+  padding: 14px 18px;
+}
+
+.modal-foot {
+  display: flex;
+  gap: 8px;
+  padding: 10px 18px;
+  border-top: 1px solid var(--border);
+  background: var(--panel);
+  border-radius: 0 0 8px 8px;
+}
+
+.custom-toggle {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin: 0 0 8px;
+  font-weight: 600;
+}
+
+.uses-default {
+  margin: 0 0 4px;
+  font-size: 0.9em;
+}
+
+.split-summary {
+  border-collapse: collapse;
+  font-variant-numeric: tabular-nums;
+  color: var(--muted);
+}
+
+.split-summary th {
+  text-align: left;
+  font-weight: normal;
+  padding: 2px 16px 2px 0;
+}
+
+.split-summary td {
+  text-align: right;
+  padding: 2px 0;
+}

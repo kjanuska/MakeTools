@@ -2,11 +2,13 @@
 // counts, inputs with a %, and a % split of values for each other field
 // (shared by every input unless an input overrides it). Next to it are the
 // task counts it gives, compared with the file as it is now.
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Cell } from "../../components/table/cells";
 import type { CellType, TableUI } from "../../components/table/types";
 import { TASK_COL as C, TASK_FIELDS } from "../../lib/formats/tasks";
+import { ACTIONS, useShortcutsRef } from "../../lib/shortcuts";
 import { BreakdownView } from "./BreakdownView";
+import "./tasks.css";
 import {
   breakdown,
   evenCounts,
@@ -220,6 +222,151 @@ function SplitEditor({
   );
 }
 
+/** One field's split in a card: its name and hint, then `extra` (e.g. a toggle), then the editor. */
+function SplitCard({ field, extra, children }: { field: SplitField; extra?: ReactNode; children: ReactNode }) {
+  return (
+    <div className="builder-card split-card">
+      <h4>{FIELD_LABELS[field]}</h4>
+      <p className="muted hint">{SPLIT_HINTS[field]}</p>
+      {extra}
+      {children}
+    </div>
+  );
+}
+
+/** A split shown read-only, e.g. the default an input uses. */
+function SplitSummary({ split, label }: { split: Split; label: string }) {
+  return (
+    <table className="split-summary" aria-label={label}>
+      <tbody>
+        {split.map((p, i) => (
+          <tr key={i}>
+            <th scope="row">{p.value === "" ? <span className="muted">(empty)</span> : p.value}</th>
+            <td className="num">{Number.isFinite(p.percent) ? `${round2(p.percent)}%` : "?"}</td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  );
+}
+
+/**
+ * Dialog with one input's splits, laid out like "Splits for every input".
+ * Each field uses the default until "Custom for this input" is ticked. Edits
+ * apply as they're made; Cancel (or Escape) puts back what was there when it
+ * opened.
+ */
+function InputSplitsDialog({
+  input,
+  index,
+  defaults,
+  ctx,
+  typeOf,
+  onChange,
+  onDone,
+  onCancel,
+}: {
+  input: InputPlan;
+  index: number;
+  defaults: BuildPlan["defaults"];
+  ctx: TaskContext;
+  typeOf: (f: SplitField) => CellType<TaskContext>;
+  onChange: (overrides: InputPlan["overrides"]) => void;
+  onDone: () => void;
+  onCancel: () => void;
+}) {
+  const boxRef = useRef<HTMLDivElement>(null);
+  // While open, the app's shortcuts (save, back…) don't act behind the dialog:
+  // it handles every action itself, as a no-op, so lower views never get them.
+  const noShortcuts = useRef(Object.fromEntries(ACTIONS.map((a) => [a.id, () => {}])));
+  useShortcutsRef(noShortcuts);
+
+  useEffect(() => {
+    const opener = document.activeElement as HTMLElement | null;
+    boxRef.current?.focus();
+    return () => opener?.focus?.();
+  }, []);
+
+  const name = input.input.trim() ? `"${input.input.trim()}"` : `input ${index + 1}`;
+  const titleId = `input-splits-title-${index}`;
+
+  return (
+    <div className="modal-backdrop">
+      <div
+        className="modal"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={titleId}
+        tabIndex={-1}
+        ref={boxRef}
+        onKeyDown={(e) => {
+          if (e.key === "Escape") {
+            e.stopPropagation();
+            onCancel();
+          }
+        }}
+      >
+        <div className="modal-head">
+          <h3 id={titleId}>Splits for {name}</h3>
+          <p className="muted">
+            Each field uses the split for every input unless you make it custom for this input.
+          </p>
+        </div>
+        <div className="modal-body builder-splits">
+          {SPLIT_FIELDS.map((f) => {
+            const own = input.overrides[f];
+            const label = FIELD_LABELS[f];
+            return (
+              <SplitCard
+                key={f}
+                field={f}
+                extra={
+                  <label className="custom-toggle">
+                    <input
+                      type="checkbox"
+                      aria-label={`Custom ${label} split`}
+                      checked={!!own}
+                      onChange={(e) => {
+                        const overrides = { ...input.overrides };
+                        if (e.target.checked) overrides[f] = defaults[f].map((p) => ({ ...p }));
+                        else delete overrides[f];
+                        onChange(overrides);
+                      }}
+                    />{" "}
+                    Custom for this input
+                  </label>
+                }
+              >
+                {own ? (
+                  <SplitEditor
+                    field={f}
+                    split={own}
+                    ctx={ctx}
+                    type={typeOf(f)}
+                    label={`${label} for input ${index + 1}`}
+                    onChange={(s) => onChange({ ...input.overrides, [f]: s })}
+                  />
+                ) : (
+                  <>
+                    <p className="muted uses-default">Uses the split for every input:</p>
+                    <SplitSummary split={defaults[f]} label={`${label} (all inputs), used by input ${index + 1}`} />
+                  </>
+                )}
+              </SplitCard>
+            );
+          })}
+        </div>
+        <div className="modal-foot">
+          <button className="primary" onClick={onDone}>
+            Done
+          </button>
+          <button onClick={onCancel}>Cancel</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function GroupEditor({
   group,
   ctx,
@@ -311,7 +458,10 @@ function GroupEditor({
 
 export function TaskBuilder({ initial, ctx, ui, before, onApply, onReset }: Props) {
   const [plan, setPlan] = useState<BuildPlan>(initial);
-  const [openOverrides, setOpenOverrides] = useState<Set<number>>(new Set());
+  /** The input whose splits are open in the dialog, and its overrides when it opened (for Cancel). */
+  const [editing, setEditing] = useState<{ k: number; saved: InputPlan["overrides"] } | null>(null);
+  const setOverrides = (k: number, overrides: InputPlan["overrides"]) =>
+    setPlan((p) => ({ ...p, inputs: p.inputs.map((x, j) => (j === k ? { ...x, overrides } : x)) }));
 
   const errors = useMemo(() => planErrors(plan, ctx), [plan, ctx]);
   const rows = useMemo(() => (errors.length ? null : generateRows(plan)), [plan, errors]);
@@ -324,44 +474,6 @@ export function TaskBuilder({ initial, ctx, ui, before, onApply, onReset }: Prop
   };
   const total = planTotal(plan);
   const changed = !!after && JSON.stringify(after) !== JSON.stringify(before);
-
-  const inputOverrides = (input: InputPlan, k: number, set: (part: Partial<InputPlan>) => void) => {
-    if (!openOverrides.has(k)) return null;
-    return (
-      <div className="builder-overrides">
-        {SPLIT_FIELDS.map((f) => {
-          const own = input.overrides[f];
-          return (
-            <div key={f} className="override">
-              <label>
-                <input
-                  type="checkbox"
-                  checked={!!own}
-                  onChange={(e) => {
-                    const overrides = { ...input.overrides };
-                    if (e.target.checked) overrides[f] = plan.defaults[f].map((p) => ({ ...p }));
-                    else delete overrides[f];
-                    set({ overrides });
-                  }}
-                />{" "}
-                Custom {FIELD_LABELS[f]} split
-              </label>
-              {own && (
-                <SplitEditor
-                  field={f}
-                  split={own}
-                  ctx={ctx}
-                  type={typeOf(f)}
-                  label={`${FIELD_LABELS[f]} for input ${k + 1}`}
-                  onChange={(s) => set({ overrides: { ...input.overrides, [f]: s } })}
-                />
-              )}
-            </div>
-          );
-        })}
-      </div>
-    );
-  };
 
   return (
     <div className="task-layout">
@@ -415,22 +527,12 @@ export function TaskBuilder({ initial, ctx, ui, before, onApply, onReset }: Prop
                       spellCheck={false}
                       onChange={(e) => set({ input: e.target.value })}
                     />
-                    <button
-                      aria-expanded={openOverrides.has(k)}
-                      onClick={() =>
-                        setOpenOverrides((s) => {
-                          const n = new Set(s);
-                          if (!n.delete(k)) n.add(k);
-                          return n;
-                        })
-                      }
-                    >
+                    <button aria-haspopup="dialog" onClick={() => setEditing({ k, saved: input.overrides })}>
                       {custom.length ? `Custom: ${custom.join(", ")}` : "Custom splits…"}
                     </button>
                   </>
                 );
               }}
-              renderAfter={inputOverrides}
             />
           </div>
         </section>
@@ -442,9 +544,7 @@ export function TaskBuilder({ initial, ctx, ui, before, onApply, onReset }: Prop
           <p className="muted">Each input's tasks are split like this, unless the input has a custom split.</p>
           <div className="builder-splits">
             {SPLIT_FIELDS.map((f) => (
-              <div key={f} className="builder-card split-card">
-                <h4>{FIELD_LABELS[f]}</h4>
-                <p className="muted hint">{SPLIT_HINTS[f]}</p>
+              <SplitCard key={f} field={f}>
                 <SplitEditor
                   field={f}
                   split={plan.defaults[f]}
@@ -453,7 +553,7 @@ export function TaskBuilder({ initial, ctx, ui, before, onApply, onReset }: Prop
                   label={`${FIELD_LABELS[f]} (all inputs)`}
                   onChange={(s) => setPlan((p) => ({ ...p, defaults: { ...p.defaults, [f]: s } }))}
                 />
-              </div>
+              </SplitCard>
             ))}
           </div>
         </section>
@@ -480,6 +580,22 @@ export function TaskBuilder({ initial, ctx, ui, before, onApply, onReset }: Prop
           </ul>
         )}
       </div>
+
+      {editing && plan.inputs[editing.k] && (
+        <InputSplitsDialog
+          input={plan.inputs[editing.k]}
+          index={editing.k}
+          defaults={plan.defaults}
+          ctx={ctx}
+          typeOf={typeOf}
+          onChange={(overrides) => setOverrides(editing.k, overrides)}
+          onDone={() => setEditing(null)}
+          onCancel={() => {
+            setOverrides(editing.k, editing.saved);
+            setEditing(null);
+          }}
+        />
+      )}
 
       <section className="task-counts">
         <h3>Tasks</h3>
