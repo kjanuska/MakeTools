@@ -11,6 +11,17 @@ export async function pickFolder(defaultPath?: string): Promise<string | null> {
   return typeof result === "string" ? result : null;
 }
 
+/** Text file picker. Returns null if cancelled. */
+export async function pickTextFile(title: string): Promise<string | null> {
+  const result = await open({
+    directory: false,
+    multiple: false,
+    title,
+    filters: [{ name: "Text files", extensions: ["txt"] }],
+  });
+  return typeof result === "string" ? result : null;
+}
+
 export function confirmAction(text: string, title: string): Promise<boolean> {
   return ask(text, { title, kind: "warning" });
 }

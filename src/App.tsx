@@ -25,6 +25,8 @@ import {
 import type { TableStore } from "./lib/table/store";
 import { useStoreVersion } from "./lib/table/store";
 import { guardWindowClose } from "./lib/window";
+import { AccountFileView } from "./modules/accounts/AccountFileView";
+import { AccountsOverview } from "./modules/accounts/AccountsOverview";
 import { GroupsOverview } from "./modules/profiles/GroupsOverview";
 import { ProfilesEditor } from "./modules/profiles/ProfilesEditor";
 import { confirmOverwrite } from "./modules/profiles/prompts";
@@ -363,6 +365,22 @@ export default function App() {
         onOpen={openFile}
         onFilesChanged={() => setListVersion((v) => v + 1)}
         findRequest={findRequest}
+      />
+    );
+  } else if (mod.id === "accounts") {
+    main = selected ? (
+      <AccountFileView
+        key={selected.path}
+        file={selected}
+        onBack={() => setSelected(null)}
+        onChanged={() => setListVersion((v) => v + 1)}
+      />
+    ) : (
+      <AccountsOverview
+        files={folders.accounts.files}
+        dir={dir}
+        onOpen={openFile}
+        onFilesChanged={() => setListVersion((v) => v + 1)}
       />
     );
   } else {

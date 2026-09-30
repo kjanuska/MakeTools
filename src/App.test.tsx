@@ -7,6 +7,7 @@ import type { BackupEntry, FileEntry, TextFile } from "./lib/fs";
 import { formatDateTime } from "./lib/format";
 import { getMakebotPath, setMakebotPath } from "./lib/settings";
 import { guardWindowClose } from "./lib/window";
+import { FilePanel } from "./shell/FilePanel";
 
 vi.mock("./lib/settings", () => ({
   getMakebotPath: vi.fn(),
@@ -199,21 +200,19 @@ describe("modules and file list", () => {
 describe("file panel", () => {
   it("shows file info without showing the contents", async () => {
     const calls = backend();
-    render(<App />);
-    await openAccountFile();
+    render(<FilePanel file={ACCOUNT_FILE} onChanged={() => {}} />);
 
     expect(await screen.findByText("CRLF")).toBeTruthy();
     expect(screen.getByText("22 B")).toBeTruthy();
     expect(screen.getByText("No")).toBeTruthy();
     expect(screen.queryByText(/secret-password/)).toBeNull();
-    // The account file is read once (task files are also read, to check them).
+    // The file is read once.
     expect(callsOf(calls, "read_text").filter((a) => a.path === ACCOUNT_FILE.path)).toEqual([{ path: ACCOUNT_FILE.path }]);
   });
 
   it("shows BOM and mixed line endings", async () => {
     backend({ read_text: () => ({ text: "\uFEFFa\r\nb\n", lineEnding: "mixed", hasBom: true }) });
-    render(<App />);
-    await openAccountFile();
+    render(<FilePanel file={ACCOUNT_FILE} onChanged={() => {}} />);
     expect(await screen.findByText("Mixed (CRLF and LF)")).toBeTruthy();
     expect(screen.getByText("Yes")).toBeTruthy();
   });
@@ -224,8 +223,7 @@ describe("file panel", () => {
         throw "file is not valid UTF-8; not opened to avoid corrupting it";
       },
     });
-    render(<App />);
-    await openAccountFile();
+    render(<FilePanel file={ACCOUNT_FILE} onChanged={() => {}} />);
     expect(await screen.findByText(/Couldn't read file: file is not valid UTF-8/)).toBeTruthy();
   });
 });
@@ -258,6 +256,9 @@ describe("backups", () => {
     await openAccountFile();
 
     const restoreButtons = await screen.findAllByRole("button", { name: "Restore" });
+    const reads = () => callsOf(calls, "read_text").filter((a) => a.path === ACCOUNT_FILE.path).length;
+    await waitFor(() => expect(screen.queryByText("Loading…")).toBeNull());
+    const readsBefore = reads();
     fireEvent.click(restoreButtons[1]);
 
     const when = formatDateTime(BACKUPS[1].createdMs);
@@ -266,7 +267,7 @@ describe("backups", () => {
     expect(callsOf(calls, "restore_backup")).toEqual([{ path: ACCOUNT_FILE.path, id: BACKUPS[1].id }]);
     await waitFor(() => {
       expect(callsOf(calls, "list_backups")).toHaveLength(2);
-      expect(callsOf(calls, "read_text").filter((a) => a.path === ACCOUNT_FILE.path)).toHaveLength(2);
+      expect(reads()).toBeGreaterThan(readsBefore);
       expect(callsOf(calls, "list_files")).toHaveLength(8);
     });
   });

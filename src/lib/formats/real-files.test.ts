@@ -6,6 +6,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { afterAll, describe, expect, it } from "vitest";
+import { accountsOf, appendLines, oddLines, parseAccounts } from "./accounts";
 import { parseProfiles, serializeProfiles } from "./profiles";
 import { cleanInputs, joinBrokenLines, parseTasks, serializeTasks, TASK_COL } from "./tasks";
 import { breakdown, generateRows, inferPlan, SPLIT_FIELDS } from "../../modules/tasks/build";
@@ -19,10 +20,10 @@ function firstDifference(a: Buffer, b: Buffer): number {
   return a.length === b.length ? -1 : n;
 }
 
-function realFolder(sub: string) {
+function realFolder(sub: string, ext = ".csv") {
   const dir = path.join(root, sub);
   const available = fs.existsSync(dir);
-  const names = available ? fs.readdirSync(dir).filter((n) => n.toLowerCase().endsWith(".csv")) : [];
+  const names = available ? fs.readdirSync(dir).filter((n) => n.toLowerCase().endsWith(ext)) : [];
   let tmp = "";
   /** Bytes of a temporary copy of a real file. */
   const read = (name: string) => {
@@ -144,3 +145,29 @@ describe.skipIf(!tasks.available || !profiles.available)("real task files: build
 
 /** The text with spaces, quotes and line breaks removed, for comparing fixes. */
 const bytesWithout = (s: string) => s.replace(/[ "\r\n]/g, "");
+
+const accounts = realFolder("account", ".txt");
+
+describe.skipIf(!accounts.available)("real account files (temporary copies)", () => {
+  afterAll(accounts.cleanup);
+
+  it("finds account files", () => {
+    expect(accounts.names.length).toBeGreaterThan(0);
+  });
+
+  it.each(accounts.names)("%s: every line is an account", (name) => {
+    const doc = parseAccounts(accounts.read(name).toString("utf8"));
+    expect(oddLines(doc).length, `${name}: unrecognized lines`).toBe(0);
+  });
+
+  it.each(accounts.names)("%s: appending keeps every existing byte", (name) => {
+    const bytes = accounts.read(name);
+    const text = bytes.toString("utf8");
+    const count = accountsOf(parseAccounts(text)).length;
+    const out = appendLines(text, ["new@example.com:pw"]);
+    const prefix = Buffer.from(out, "utf8").subarray(0, bytes.length);
+    const diff = firstDifference(bytes, prefix);
+    expect(diff, `${name}: first difference at byte ${diff}`).toBe(-1);
+    expect(accountsOf(parseAccounts(out)).length).toBe(count + 1);
+  });
+});
