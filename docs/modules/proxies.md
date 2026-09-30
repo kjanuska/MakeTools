@@ -45,5 +45,14 @@ The same as profiles and tasks:
 - Creating, renaming or deleting proxy files. Tasks refer to them by name, so a rename would break task files.
 - Removing duplicates, and editing a single line.
 
+## Build notes (2026-09-30)
+- Format: `src/lib/formats/proxies.ts`. It holds pure text-in/text-out functions: `parseProxies`, `countProxies`, `proxyProblem`/`oddLines`, `cleanPasted`, `replaceProxies`, `appendProxies` and `shuffleProxies`.
+  - Shuffle is Fisher–Yates. It tries again if it lands on the same order; if the random source keeps doing that, it moves every line one place.
+- Store: `src/modules/proxies/store.ts` (`ProxyStore`). It keeps each file's text exactly as read, and saves the same way the table store does: re-read first, ask before overwriting a file that changed on disk, then read it back to check.
+  - `useFileActions` and `useStoreVersion` now take any store with the right shape, so the proxies view reuses the Save / Discard / Backups code.
+- View: `src/modules/proxies/ProxyFileView.tsx`. With no file selected, the Proxies tab says "Select a proxy file."
+- The count uses the current text, including unsaved changes. Odd lines count toward it.
+- Paste warnings give line numbers as they appear in the paste box, blank lines included. Up to 10 are listed.
+
 ## Open questions
 - None.
