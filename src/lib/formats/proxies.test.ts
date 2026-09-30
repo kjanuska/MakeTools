@@ -1,14 +1,13 @@
 import { describe, expect, it } from "vitest";
 import {
-  appendProxies,
-  cleanPasted,
   countProxies,
+  fromEditorText,
   oddLines,
   parseProxies,
   proxyProblem,
-  replaceProxies,
   serializeProxies,
   shuffleProxies,
+  toEditorText,
 } from "./proxies";
 
 const A = "proxy.example.net:8000:user1:pa55";
@@ -108,67 +107,71 @@ describe("oddLines", () => {
   });
 });
 
-describe("cleanPasted", () => {
-  it("trims each line and drops blank lines, whatever the line endings", () => {
-    expect(cleanPasted(`  ${A}  \r\n\r\n${B}\n\t\n${C}\r\n`)).toEqual([A, B, C]);
-    expect(cleanPasted(`﻿${A}`)).toEqual([A]);
-    expect(cleanPasted("")).toEqual([]);
-    expect(cleanPasted(" \r\n \n")).toEqual([]);
+describe("toEditorText", () => {
+  it("shows the file with \\n line endings and no BOM", () => {
+    expect(toEditorText(`${A}\r\n${B}\r\n`)).toBe(`${A}\n${B}\n`);
+    expect(toEditorText(`${A}\n${B}`)).toBe(`${A}\n${B}`);
+    expect(toEditorText(`﻿${A}\r\n`)).toBe(`${A}\n`);
+    expect(toEditorText("")).toBe("");
   });
 });
 
-describe("replaceProxies", () => {
-  it("keeps CRLF and a final newline", () => {
-    expect(replaceProxies(`${A}\r\n`, [B, C])).toBe(`${B}\r\n${C}\r\n`);
+describe("fromEditorText", () => {
+  it.each([
+    ["CRLF", `${A}\r\n${B}\r\n`],
+    ["CRLF, no final newline", `${A}\r\n${B}`],
+    ["LF", `${A}\n${B}\n`],
+    ["mixed endings", `${A}\n${B}\r\n${C}`],
+    ["BOM", `﻿${A}\r\n`],
+    ["BOM only", "﻿"],
+    ["empty", ""],
+    ["blank and odd lines", `bad line\r\n\r\n  ${A}  \r\n`],
+    ["non-ASCII", `hôst.example:80:usér:pässwörd\r\n`],
+  ])("unchanged editor text gives the exact file back: %s", (_, text) => {
+    expect(fromEditorText(toEditorText(text), text)).toBe(text);
   });
 
-  it("keeps a missing final newline", () => {
-    expect(replaceProxies(`${A}\r\n${B}`, [C, D])).toBe(`${C}\r\n${D}`);
+  it("an edit uses the file's CRLF on every line", () => {
+    expect(fromEditorText(`${A}\n${C}\n`, `${A}\r\n${B}\r\n`)).toBe(`${A}\r\n${C}\r\n`);
   });
 
-  it("keeps LF and a BOM", () => {
-    expect(replaceProxies(`﻿${A}\n`, [B, C])).toBe(`﻿${B}\n${C}\n`);
+  it("an edit in an LF-only file keeps LF", () => {
+    expect(fromEditorText(`${A}\n${C}\n`, `${A}\n${B}\n`)).toBe(`${A}\n${C}\n`);
   });
 
-  it("an empty or one-line file gets CRLF", () => {
-    expect(replaceProxies("", [A, B])).toBe(`${A}\r\n${B}`);
-    expect(replaceProxies(D, [A, B])).toBe(`${A}\r\n${B}`);
-  });
-
-  it("drops the old blank lines", () => {
-    expect(replaceProxies(`${A}\r\n\r\n${B}\r\n`, [C])).toBe(`${C}\r\n`);
-  });
-});
-
-describe("appendProxies", () => {
-  it("keeps every existing byte, with a final newline", () => {
-    expect(appendProxies(`${A}\r\n${B}\r\n`, [C, D])).toBe(`${A}\r\n${B}\r\n${C}\r\n${D}\r\n`);
-  });
-
-  it("adds the missing line ending first and keeps no final newline", () => {
-    expect(appendProxies(`${A}\r\n${B}`, [C, D])).toBe(`${A}\r\n${B}\r\n${C}\r\n${D}`);
-  });
-
-  it("uses LF in an LF file", () => {
-    expect(appendProxies(`${A}\n`, [B])).toBe(`${A}\n${B}\n`);
-  });
-
-  it("keeps blank lines, odd lines and mixed endings exactly", () => {
-    const text = `bad line\n${A}\r\n\r\n`;
-    expect(appendProxies(text, [B])).toBe(`${text}${B}\r\n`);
+  it("an edit in a mixed file uses CRLF throughout", () => {
+    expect(fromEditorText(`${A}\n${B}\n${D}`, `${A}\n${B}\r\n${C}`)).toBe(`${A}\r\n${B}\r\n${D}`);
   });
 
   it("keeps a BOM", () => {
-    expect(appendProxies(`﻿${A}`, [B])).toBe(`﻿${A}\r\n${B}`);
-    expect(appendProxies("﻿", [B])).toBe(`﻿${B}`);
+    expect(fromEditorText(`${B}\n`, `﻿${A}\r\n`)).toBe(`﻿${B}\r\n`);
   });
 
-  it("into an empty file", () => {
-    expect(appendProxies("", [A, B])).toBe(`${A}\r\n${B}`);
+  it("keeps the text as typed: final newline or none, spaces, blank lines", () => {
+    expect(fromEditorText(`${A}\n${B}`, `${A}\r\n`)).toBe(`${A}\r\n${B}`);
+    expect(fromEditorText(`${A}\n\n ${B} \n`, `${A}\r\n`)).toBe(`${A}\r\n\r\n ${B} \r\n`);
   });
 
-  it("nothing to add changes nothing", () => {
-    expect(appendProxies(`${A}\r\n`, [])).toBe(`${A}\r\n`);
+  it("appending at the end keeps every existing byte", () => {
+    const file = `${A}\r\n${B}\r\n`;
+    const out = fromEditorText(`${toEditorText(file)}${C}\n${D}\n`, file);
+    expect(out.startsWith(file)).toBe(true);
+    expect(out).toBe(`${file}${C}\r\n${D}\r\n`);
+  });
+
+  it("pasted text with CRLF or CR endings is converted too", () => {
+    expect(fromEditorText(`${A}\r\n${B}\r${C}`, `${A}\r\n`)).toBe(`${A}\r\n${B}\r\n${C}`);
+    expect(fromEditorText(`${A}\r\n${B}`, `${A}\n`)).toBe(`${A}\n${B}`);
+  });
+
+  it("clearing the editor empties the file (the BOM stays)", () => {
+    expect(fromEditorText("", `${A}\r\n`)).toBe("");
+    expect(fromEditorText("", `﻿${A}\r\n`)).toBe("﻿");
+  });
+
+  it("an empty or one-line file gets CRLF", () => {
+    expect(fromEditorText(`${A}\n${B}`, "")).toBe(`${A}\r\n${B}`);
+    expect(fromEditorText(`${D}\n${A}`, D)).toBe(`${D}\r\n${A}`);
   });
 });
 

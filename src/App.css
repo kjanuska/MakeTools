@@ -1120,72 +1120,65 @@ button.link {
   flex-wrap: wrap;
 }
 
-.proxy-list-section {
-  flex: 1 1 420px;
+/* Line numbers beside an editable text box; both scroll together. */
+.proxy-editor {
+  flex: 1 1 480px;
   min-width: 0;
-}
-
-.proxy-filter {
-  display: block;
-  margin-bottom: 6px;
-}
-
-.proxy-list {
-  height: calc(100vh - 230px);
-  min-height: 240px;
-  overflow: auto;
+  display: flex;
+  height: calc(100vh - 200px);
+  min-height: 260px;
   border: 1px solid var(--border);
   border-radius: 4px;
+  overflow: hidden;
   font-family: Consolas, "Cascadia Mono", monospace;
   font-size: 13px;
+  line-height: 20px;
 }
 
-.proxy-row {
-  position: absolute;
-  left: 0;
-  right: 0;
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 0 8px;
-  white-space: pre;
+.proxy-editor:focus-within {
+  border-color: var(--accent);
 }
 
-.proxy-row .ln {
-  flex: 0 0 5ch;
+.proxy-gutter {
+  margin: 0;
+  padding: 6px 8px;
+  min-width: 6ch;
   text-align: right;
   color: var(--muted);
+  background: var(--panel);
+  border-right: 1px solid var(--border);
+  overflow: hidden;
   user-select: none;
+  font: inherit;
 }
 
-.proxy-row.odd {
-  background: var(--changed-bg);
+.proxy-editor textarea {
+  flex: 1;
+  margin: 0;
+  padding: 6px 10px;
+  border: none;
+  border-radius: 0;
+  outline: none;
+  resize: none;
+  white-space: pre;
+  overflow: auto;
+  background: var(--bg);
+  color: var(--text);
+  font: inherit;
 }
 
-.proxy-row .why {
+.proxy-odd-section {
+  flex: 0 1 300px;
+  max-height: calc(100vh - 200px);
+  overflow-y: auto;
+}
+
+.proxy-odd-section h3 {
+  margin: 0 0 4px;
   color: var(--changed);
-  font-family: "Segoe UI", system-ui, sans-serif;
-  font-size: 12px;
-}
-
-.proxy-paste {
-  flex: 0 1 380px;
-}
-
-.proxy-paste h3 {
-  margin: 0 0 6px;
-}
-
-.proxy-paste textarea {
-  width: 100%;
-  height: 260px;
-  resize: vertical;
-  font-family: Consolas, "Cascadia Mono", monospace;
-  font-size: 13px;
 }
 
 .proxy-odd {
-  margin: 0 0 8px;
+  margin: 0;
   padding-left: 18px;
-  color: var(--changed);
 }

@@ -1,16 +1,15 @@
-// A proxy file: its proxies (numbered, as written) and count, a box to paste a
-// new list (replace or append), and Shuffle. Edits stay unsaved until Save.
+// A proxy file: its proxies in an editable, numbered text box, the count,
+// warnings for odd lines, and Shuffle. Edits stay unsaved until Save.
 import { useEffect, useMemo, useRef, useState } from "react";
 import { BackupsMenu } from "../../components/table/BackupsMenu";
 import { useFileActions } from "../../components/table/useFileActions";
 import {
-  appendProxies,
-  cleanPasted,
   countProxies,
+  fromEditorText,
   oddLines,
   parseProxies,
-  replaceProxies,
   shuffleProxies,
+  toEditorText,
 } from "../../lib/formats/proxies";
 import type { BackupEntry, FileEntry } from "../../lib/fs";
 import { useShortcutsRef, type ActionId } from "../../lib/shortcuts";
@@ -27,14 +26,14 @@ interface Props {
 const plural = (n: number, one: string, many: string) => `${n.toLocaleString("en-US")} ${n === 1 ? one : many}`;
 const proxies = (n: number) => plural(n, "proxy", "proxies");
 
-/** How many odd lines are listed under the paste box. */
-const ODD_SHOWN = 10;
+/** Must match the editor's line-height in App.css. */
+const LINE_HEIGHT = 20;
+/** How many odd lines are listed. */
+const ODD_SHOWN = 100;
 
 export function ProxyFileView({ file, store, confirmOverwrite, onSaved }: Props) {
   useStoreVersion(store);
   const [backupsOpen, setBackupsOpen] = useState(false);
-  const [pasted, setPasted] = useState("");
-  const [onlyOdd, setOnlyOdd] = useState(false);
   const { error, status, setStatus, saving, save, discard, restore } = useFileActions(
     store,
     file,
@@ -43,6 +42,8 @@ export function ProxyFileView({ file, store, confirmOverwrite, onSaved }: Props)
   );
   const handlersRef = useRef<Partial<Record<ActionId, () => void>>>({});
   useShortcutsRef(handlersRef);
+  const editorRef = useRef<HTMLTextAreaElement>(null);
+  const gutterRef = useRef<HTMLPreElement>(null);
 
   useEffect(() => {
     void store.load(file);
@@ -50,18 +51,13 @@ export function ProxyFileView({ file, store, confirmOverwrite, onSaved }: Props)
 
   const entry = store.get(file.path);
   const text = entry?.text ?? "";
+  const editorText = useMemo(() => toEditorText(text), [text]);
   const parsed = useMemo(() => parseProxies(text), [text]);
   const count = useMemo(() => countProxies(parsed), [parsed]);
   const odd = useMemo(() => oddLines(parsed.lines), [parsed]);
-  const rows = useMemo(() => {
-    const problems = new Map(odd.map((o) => [o.line, o.problem]));
-    const all = parsed.lines.map((t, i) => ({ line: i + 1, text: t, problem: problems.get(i + 1) }));
-    return onlyOdd ? all.filter((r) => r.problem) : all;
-  }, [parsed, odd, onlyOdd]);
-
-  const pastedLines = useMemo(() => cleanPasted(pasted), [pasted]);
-  // Line numbers as in the paste box, so odd lines are easy to find there.
-  const pastedOdd = useMemo(() => oddLines(pasted.split(/\r?\n/).map((l) => l.trim())), [pasted]);
+  // One number per editor line, including the empty line after a final line ending.
+  const editorLines = useMemo(() => editorText.split("\n").length, [editorText]);
+  const gutter = useMemo(() => Array.from({ length: editorLines }, (_, i) => i + 1).join("\n"), [editorLines]);
 
   if (!entry) {
     handlersRef.current = {};
@@ -86,21 +82,31 @@ export function ProxyFileView({ file, store, confirmOverwrite, onSaved }: Props)
     if (await restore(b)) setBackupsOpen(false);
   }
 
+  function edit(value: string) {
+    // In the style of the file on disk, so typing it back to what's saved is no change.
+    store.update(file.path, () => fromEditorText(value, entry!.loaded.text));
+    if (status) setStatus(null);
+  }
+
   function shuffle() {
     store.update(file.path, (t) => shuffleProxies(t));
     setStatus(`Shuffled ${proxies(count)}. Save to write the file.`);
   }
 
-  function applyPaste(mode: "replace" | "append") {
-    const lines = pastedLines;
-    if (lines.length === 0) return;
-    store.update(file.path, (t) => (mode === "replace" ? replaceProxies(t, lines) : appendProxies(t, lines)));
-    setPasted("");
-    setStatus(
-      mode === "replace"
-        ? `Replaced the list with ${proxies(lines.length)}. Save to write the file.`
-        : `Added ${proxies(lines.length)} to the end. Save to write the file.`,
-    );
+  /** Selects a line in the editor and scrolls to it. */
+  function goToLine(line: number) {
+    const el = editorRef.current;
+    if (!el) return;
+    const lines = editorText.split("\n");
+    const start = lines.slice(0, line - 1).reduce((n, l) => n + l.length + 1, 0);
+    el.focus();
+    el.setSelectionRange(start, start + lines[line - 1].length);
+    el.scrollTop = Math.max(0, (line - 3) * LINE_HEIGHT);
+    syncGutter();
+  }
+
+  function syncGutter() {
+    if (gutterRef.current && editorRef.current) gutterRef.current.scrollTop = editorRef.current.scrollTop;
   }
 
   return (
@@ -136,99 +142,40 @@ export function ProxyFileView({ file, store, confirmOverwrite, onSaved }: Props)
       </p>
 
       <div className="proxy-layout">
-        <section className="proxy-list-section" aria-label="Proxies">
-          {odd.length > 0 && (
-            <label className="proxy-filter">
-              <input type="checkbox" checked={onlyOdd} onChange={(e) => setOnlyOdd(e.target.checked)} /> Only odd
-              lines
-            </label>
-          )}
-          {parsed.lines.length === 0 ? <p className="muted">The file is empty.</p> : <ProxyList rows={rows} />}
-        </section>
-
-        <section className="proxy-paste" aria-label="Paste a list">
-          <h3>Paste a list</h3>
+        <div className="proxy-editor">
+          <pre className="proxy-gutter" ref={gutterRef} aria-hidden="true">
+            {gutter}
+          </pre>
           <textarea
-            aria-label="Pasted proxies"
-            value={pasted}
-            onChange={(e) => setPasted(e.target.value)}
-            placeholder={"host:port:user:pass\nhost:port"}
+            ref={editorRef}
+            aria-label="Proxy list"
+            value={editorText}
+            onChange={(e) => edit(e.target.value)}
+            onScroll={syncGutter}
+            wrap="off"
             spellCheck={false}
+            autoComplete="off"
+            placeholder={"One proxy per line:\nhost:port:user:pass\nhost:port"}
           />
-          <p className="muted">
-            {proxies(pastedLines.length)}
-            {pastedOdd.length > 0 && <span className="warn"> · {plural(pastedOdd.length, "odd line", "odd lines")}</span>}
-            . Spaces around lines and blank lines are removed.
-          </p>
-          {pastedOdd.length > 0 && (
-            <ul className="proxy-odd" aria-label="Odd pasted lines">
-              {pastedOdd.slice(0, ODD_SHOWN).map((o) => (
+        </div>
+
+        {odd.length > 0 && (
+          <section className="proxy-odd-section" aria-label="Odd lines">
+            <h3>Odd lines</h3>
+            <p className="muted">Not host:port or host:port:user:pass. They're still saved as they are.</p>
+            <ul className="proxy-odd">
+              {odd.slice(0, ODD_SHOWN).map((o) => (
                 <li key={o.line}>
-                  Line {o.line}: {o.problem}
+                  <button className="link" onClick={() => goToLine(o.line)}>
+                    Line {o.line}
+                  </button>
+                  : {o.problem}
                 </li>
               ))}
-              {pastedOdd.length > ODD_SHOWN && <li className="muted">…and {pastedOdd.length - ODD_SHOWN} more</li>}
+              {odd.length > ODD_SHOWN && <li className="muted">…and {odd.length - ODD_SHOWN} more</li>}
             </ul>
-          )}
-          <div className="toolbar">
-            <button
-              disabled={pastedLines.length === 0}
-              onClick={() => applyPaste("replace")}
-              title="The pasted list becomes the whole file"
-            >
-              Replace
-            </button>
-            <button
-              disabled={pastedLines.length === 0}
-              onClick={() => applyPaste("append")}
-              title="Add the pasted lines to the end of the file"
-            >
-              Append
-            </button>
-          </div>
-        </section>
-      </div>
-    </div>
-  );
-}
-
-interface Row {
-  line: number;
-  text: string;
-  problem?: string;
-}
-
-const ROW_HEIGHT = 22;
-/** Rows drawn above and below the visible ones. */
-const OVERSCAN = 20;
-/** Rows drawn when the list's height isn't known (e.g. before layout). */
-const FALLBACK_ROWS = 60;
-
-/** The lines, numbered. Only the visible ones are drawn, so 10,000+ lines stay fast. */
-function ProxyList({ rows }: { rows: Row[] }) {
-  const ref = useRef<HTMLDivElement>(null);
-  const [scrollTop, setScrollTop] = useState(0);
-  const height = ref.current?.clientHeight ?? 0;
-  const visible = height > 0 ? Math.ceil(height / ROW_HEIGHT) : FALLBACK_ROWS;
-  const start = Math.max(0, Math.floor(scrollTop / ROW_HEIGHT) - OVERSCAN);
-  const end = Math.min(rows.length, start + visible + 2 * OVERSCAN);
-
-  return (
-    <div className="proxy-list" ref={ref} onScroll={(e) => setScrollTop(e.currentTarget.scrollTop)}>
-      <div role="list" aria-label="Proxy lines" style={{ height: rows.length * ROW_HEIGHT, position: "relative" }}>
-        {rows.slice(start, end).map((r, i) => (
-          <div
-            role="listitem"
-            key={r.line}
-            className={r.problem ? "proxy-row odd" : "proxy-row"}
-            style={{ top: (start + i) * ROW_HEIGHT, height: ROW_HEIGHT }}
-            title={r.problem}
-          >
-            <span className="ln">{r.line}</span>
-            <span className="txt">{r.text}</span>
-            {r.problem && <span className="why">{r.problem}</span>}
-          </div>
-        ))}
+          </section>
+        )}
       </div>
     </div>
   );

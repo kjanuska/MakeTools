@@ -177,7 +177,7 @@ const proxies = realFolder("proxy", ".txt");
 
 describe.skipIf(!proxies.available)("real proxy files (temporary copies)", () => {
   afterAll(proxies.cleanup);
-  const { appendProxies, countProxies, oddLines: oddProxies, parseProxies, replaceProxies, shuffleProxies } = proxyFormat;
+  const { countProxies, fromEditorText, oddLines: oddProxies, parseProxies, shuffleProxies, toEditorText } = proxyFormat;
 
   it("finds proxy files", () => {
     expect(proxies.names.length).toBeGreaterThan(0);
@@ -190,11 +190,23 @@ describe.skipIf(!proxies.available)("real proxy files (temporary copies)", () =>
     expect(countProxies(p)).toBe(p.lines.length);
   });
 
-  it.each(proxies.names)("%s: replacing with the same lines gives the same bytes", (name) => {
+  it.each(proxies.names)("%s: through the editor unchanged gives the same bytes", (name) => {
     const bytes = proxies.read(name);
     const text = bytes.toString("utf8");
-    const out = Buffer.from(replaceProxies(text, parseProxies(text).lines), "utf8");
+    const out = Buffer.from(fromEditorText(toEditorText(text), text), "utf8");
     const diff = firstDifference(bytes, out);
+    expect(diff, `${name}: first difference at byte ${diff}`).toBe(-1);
+  });
+
+  it.each(proxies.names)("%s: editing the first line in the editor changes only those bytes", (name) => {
+    const bytes = proxies.read(name);
+    const text = bytes.toString("utf8");
+    const lines = toEditorText(text).split("\n");
+    const first = lines[0];
+    lines[0] = "203.0.113.9:8080";
+    const out = fromEditorText(lines.join("\n"), text);
+    const expected = Buffer.from("203.0.113.9:8080" + text.slice(first.length), "utf8");
+    const diff = firstDifference(expected, Buffer.from(out, "utf8"));
     expect(diff, `${name}: first difference at byte ${diff}`).toBe(-1);
   });
 
@@ -214,10 +226,11 @@ describe.skipIf(!proxies.available)("real proxy files (temporary copies)", () =>
     if (before.lines.length > 1) expect(unchanged, `${name}: order didn't change`).toBe(false);
   });
 
-  it.each(proxies.names)("%s: appending keeps every existing byte", (name) => {
+  it.each(proxies.names)("%s: adding a line at the end in the editor keeps every existing byte", (name) => {
     const bytes = proxies.read(name);
     const text = bytes.toString("utf8");
-    const out = appendProxies(text, ["203.0.113.9:8080"]);
+    const shown = toEditorText(text);
+    const out = fromEditorText(shown + (shown.endsWith("\n") ? "" : "\n") + "203.0.113.9:8080", text);
     const diff = firstDifference(bytes, Buffer.from(out, "utf8").subarray(0, bytes.length));
     expect(diff, `${name}: first difference at byte ${diff}`).toBe(-1);
     expect(countProxies(parseProxies(out))).toBe(countProxies(parseProxies(text)) + 1);

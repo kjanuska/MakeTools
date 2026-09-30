@@ -69,11 +69,9 @@ beforeEach(() => {
 
 const btn = (name: string) => screen.getByRole("button", { name }) as HTMLButtonElement;
 const status = () => screen.getByRole("status").textContent ?? "";
-const shown = () =>
-  within(screen.getByRole("list", { name: "Proxy lines" }))
-    .queryAllByRole("listitem")
-    .map((li) => [li.querySelector(".ln")!.textContent, li.querySelector(".txt")!.textContent]);
-const paste = (text: string) => fireEvent.change(screen.getByLabelText("Pasted proxies"), { target: { value: text } });
+const editor = () => screen.getByRole("textbox", { name: "Proxy list" }) as HTMLTextAreaElement;
+const type = (value: string) => fireEvent.change(editor(), { target: { value } });
+const gutter = () => document.querySelector(".proxy-gutter")!.textContent;
 const lines = (text: string) => parseProxies(text).lines;
 
 async function open(name: string) {
@@ -81,18 +79,21 @@ async function open(name: string) {
   fireEvent.click(await screen.findByRole("button", { name: "Proxies" }));
   fireEvent.click(await screen.findByRole("button", { name: new RegExp(`^${name.replace(".", "\\.")}`) }));
   await screen.findByRole("heading", { name });
-  await screen.findByRole("list", { name: "Proxy lines" });
+  await screen.findByRole("textbox", { name: "Proxy list" });
+}
+
+async function saved(): Promise<string> {
+  fireEvent.click(btn("Save"));
+  await waitFor(() => expect(saves.length).toBe(1));
+  return saves[0].text;
 }
 
 describe("proxy list and count", () => {
-  it("lists every line, numbered, as written, and counts the proxies", async () => {
+  it("shows the file in an editable box with line numbers, and counts the proxies", async () => {
     backend({ "p.txt": `${A}\r\n${B}\r\n${C}` });
     await open("p.txt");
-    expect(shown()).toEqual([
-      ["1", A],
-      ["2", B],
-      ["3", C],
-    ]);
+    expect(editor().value).toBe(`${A}\n${B}\n${C}`);
+    expect(gutter()).toBe("1\n2\n3");
     expect(status()).toContain("3 proxies");
     expect(status()).not.toContain("odd");
     expect(status()).not.toContain("Unsaved");
@@ -102,6 +103,8 @@ describe("proxy list and count", () => {
     backend({ "p.txt": `${A}\r\n\r\n${B}\r\n` });
     await open("p.txt");
     expect(status()).toContain("2 proxies");
+    // The empty line after the final line ending is numbered, like any editor.
+    expect(gutter()).toBe("1\n2\n3\n4");
   });
 
   it("one proxy, and localhost, is fine", async () => {
@@ -111,38 +114,47 @@ describe("proxy list and count", () => {
     expect(status()).not.toContain("odd");
   });
 
-  it("an empty file says so", async () => {
+  it("an empty file shows an empty editor", async () => {
     backend({ "e.txt": "" });
-    render(<App />);
-    fireEvent.click(await screen.findByRole("button", { name: "Proxies" }));
-    fireEvent.click(await screen.findByRole("button", { name: /^e\.txt/ }));
-    expect(await screen.findByText("The file is empty.")).toBeTruthy();
+    await open("e.txt");
+    expect(editor().value).toBe("");
     expect(status()).toContain("0 proxies");
     expect(btn("Shuffle").disabled).toBe(true);
   });
 
-  it("a big file counts every line but only draws the visible ones", async () => {
+  it("a big file loads whole and counts every line", async () => {
     const many = Array.from({ length: 10000 }, (_, i) => `h${i}.example:80:u:p`).join("\r\n");
     backend({ "big.txt": many });
     await open("big.txt");
     expect(status()).toContain("10,000 proxies");
-    expect(shown().length).toBeLessThan(200);
-    expect(shown()[0]).toEqual(["1", "h0.example:80:u:p"]);
+    expect(editor().value.split("\n").length).toBe(10000);
   });
 
-  it("marks odd lines and can show only them", async () => {
+  it("lists odd lines; clicking one selects it in the editor", async () => {
     backend({ "p.txt": `${A}\r\nnot a proxy\r\n${B}\r\nh:80:u` });
     await open("p.txt");
     expect(status()).toContain("4 proxies · 2 odd lines");
-    const rows = within(screen.getByRole("list", { name: "Proxy lines" })).getAllByRole("listitem");
-    expect(rows[1].className).toContain("odd");
-    expect(rows[1].getAttribute("title")).toMatch(/space/);
-    expect(rows[0].className).not.toContain("odd");
-    fireEvent.click(screen.getByLabelText(/Only odd lines/));
-    expect(shown()).toEqual([
-      ["2", "not a proxy"],
-      ["4", "h:80:u"],
-    ]);
+    const region = screen.getByRole("region", { name: "Odd lines" });
+    const items = within(region).getAllByRole("listitem").map((li) => li.textContent);
+    expect(items).toEqual([expect.stringMatching(/^Line 2: .*space/), expect.stringMatching(/^Line 4: .*3 parts/)]);
+    fireEvent.click(within(region).getByRole("button", { name: "Line 4" }));
+    const e = editor();
+    expect(e.value.slice(e.selectionStart, e.selectionEnd)).toBe("h:80:u");
+    expect(document.activeElement).toBe(e);
+  });
+
+  it("lists at most 100 odd lines", async () => {
+    backend({ "p.txt": Array.from({ length: 105 }, (_, i) => `bad${i}`).join("\r\n") });
+    await open("p.txt");
+    const items = within(screen.getByRole("region", { name: "Odd lines" })).getAllByRole("listitem");
+    expect(items.length).toBe(101);
+    expect(items[100].textContent).toBe("…and 5 more");
+  });
+
+  it("no odd lines, no odd-lines list", async () => {
+    backend({ "p.txt": A });
+    await open("p.txt");
+    expect(screen.queryByRole("region", { name: "Odd lines" })).toBeNull();
   });
 
   it("the sidebar says Select a proxy file with none open", async () => {
@@ -150,6 +162,72 @@ describe("proxy list and count", () => {
     render(<App />);
     fireEvent.click(await screen.findByRole("button", { name: "Proxies" }));
     expect(await screen.findByText("Select a proxy file.")).toBeTruthy();
+  });
+});
+
+describe("editing the list", () => {
+  it("typing makes unsaved changes; Save writes them with the file's CRLF", async () => {
+    backend({ "p.txt": `${A}\r\n${B}\r\n` });
+    await open("p.txt");
+    type(`${A}\n${C}\n`);
+    expect(status()).toContain("Unsaved changes");
+    expect(saves).toEqual([]);
+    expect(await saved()).toBe(`${A}\r\n${C}\r\n`);
+    await waitFor(() => expect(status()).toContain("Saved"));
+    expect(status()).not.toContain("Unsaved");
+  });
+
+  it("pasting at the end appends and keeps every existing byte", async () => {
+    backend({ "p.txt": `${A}\r\n${B}` });
+    await open("p.txt");
+    type(`${editor().value}\n${C}\nlocalhost`);
+    expect(status()).toContain("4 proxies");
+    expect(await saved()).toBe(`${A}\r\n${B}\r\n${C}\r\nlocalhost`);
+  });
+
+  it("pasting over everything replaces the list", async () => {
+    backend({ "p.txt": `${A}\r\n${B}\r\n` });
+    await open("p.txt");
+    type(`${C}\n`);
+    expect(status()).toContain("1 proxy");
+    expect(await saved()).toBe(`${C}\r\n`);
+  });
+
+  it("keeps an LF file's LF and a BOM", async () => {
+    backend({ "p.txt": `﻿${A}\n${B}\n` });
+    await open("p.txt");
+    expect(editor().value).toBe(`${A}\n${B}\n`);
+    type(`${B}\n${A}\n${C}\n`);
+    expect(await saved()).toBe(`﻿${B}\n${A}\n${C}\n`);
+  });
+
+  it("typing text back to what's on disk is no longer a change", async () => {
+    backend({ "p.txt": `${A}\n${B}\r\n` });
+    await open("p.txt");
+    type(`${A}\n`);
+    expect(status()).toContain("Unsaved changes");
+    type(`${A}\n${B}\n`);
+    expect(status()).not.toContain("Unsaved");
+    expect(btn("Save").disabled).toBe(true);
+  });
+
+  it("odd lines update as you type; they can still be saved", async () => {
+    backend({ "p.txt": A });
+    await open("p.txt");
+    type(`${A}\nh:99999`);
+    expect(status()).toContain("2 proxies · 1 odd line");
+    expect(within(screen.getByRole("region", { name: "Odd lines" })).getByText(/port must be a number/)).toBeTruthy();
+    expect(await saved()).toBe(`${A}\r\nh:99999`);
+  });
+
+  it("Discard changes puts the file back in the editor", async () => {
+    backend({ "p.txt": `${A}\r\n${B}` });
+    await open("p.txt");
+    type("x:1");
+    fireEvent.click(btn("Discard changes"));
+    await waitFor(() => expect(status()).not.toContain("Unsaved"));
+    expect(editor().value).toBe(`${A}\n${B}`);
+    expect(saves).toEqual([]);
   });
 });
 
@@ -162,110 +240,36 @@ describe("shuffle", () => {
     expect(status()).toContain("Unsaved changes");
     expect(status()).toContain("Shuffled 3 proxies");
     expect(saves).toEqual([]);
-    const after = shown().map((r) => r[1]);
+    const after = lines(editor().value);
     expect(after).not.toEqual([A, B, C]);
     expect([...after].sort()).toEqual([A, B, C].sort());
-    // Listed under unsaved changes and marked in the file list.
     const changes = screen.getByRole("region", { name: "Unsaved changes" });
     expect(within(changes).getByRole("button", { name: "M proxy/p.txt" })).toBeTruthy();
 
-    fireEvent.click(btn("Save"));
-    await waitFor(() => expect(saves.length).toBe(1));
-    const written = saves[0].text;
+    const written = await saved();
     expect(lines(written)).toEqual(after);
     expect(written).toMatch(/^[^\n]+\r\n[^\n]+\r\n[^\n]+\r\n$/);
-    await waitFor(() => expect(status()).toContain("Saved"));
-    expect(status()).not.toContain("Unsaved");
   });
 
   it("keeps a missing final newline", async () => {
     backend({ "p.txt": `${A}\r\n${B}` });
     await open("p.txt");
     fireEvent.click(btn("Shuffle"));
-    fireEvent.click(btn("Save"));
-    await waitFor(() => expect(saves.length).toBe(1));
-    expect(saves[0].text).toBe(`${B}\r\n${A}`);
+    expect(await saved()).toBe(`${B}\r\n${A}`);
+  });
+
+  it("shuffles what's in the editor, including unsaved edits", async () => {
+    backend({ "p.txt": A });
+    await open("p.txt");
+    type(`${A}\n${C}`);
+    fireEvent.click(btn("Shuffle"));
+    expect(editor().value).toBe(`${C}\n${A}`);
   });
 
   it("is off with fewer than 2 proxies", async () => {
     backend({ "p.txt": `${A}\r\n` });
     await open("p.txt");
     expect(btn("Shuffle").disabled).toBe(true);
-  });
-
-  it("Discard changes goes back to the file", async () => {
-    backend({ "p.txt": `${A}\r\n${B}` });
-    await open("p.txt");
-    fireEvent.click(btn("Shuffle"));
-    fireEvent.click(btn("Discard changes"));
-    await waitFor(() => expect(status()).not.toContain("Unsaved"));
-    expect(shown().map((r) => r[1])).toEqual([A, B]);
-    expect(saves).toEqual([]);
-  });
-});
-
-describe("paste a list", () => {
-  it("Replace makes the pasted list the whole file, trimmed, blank lines dropped", async () => {
-    backend({ "p.txt": `${A}\r\n${B}\r\n` });
-    await open("p.txt");
-    expect(btn("Replace").disabled).toBe(true);
-    paste(`  ${C}  \n\n${B}\n`);
-    expect(screen.getByRole("region", { name: "Paste a list" }).textContent).toContain("2 proxies");
-    fireEvent.click(btn("Replace"));
-    expect(shown()).toEqual([
-      ["1", C],
-      ["2", B],
-    ]);
-    expect(status()).toContain("2 proxies");
-    expect(status()).toContain("Replaced the list with 2 proxies");
-    expect((screen.getByLabelText("Pasted proxies") as HTMLTextAreaElement).value).toBe("");
-    fireEvent.click(btn("Save"));
-    await waitFor(() => expect(saves.length).toBe(1));
-    expect(saves[0].text).toBe(`${C}\r\n${B}\r\n`);
-  });
-
-  it("Append adds to the end and keeps every existing byte", async () => {
-    backend({ "p.txt": `${A}\r\n${B}` });
-    await open("p.txt");
-    paste(`${C}\r\nlocalhost`);
-    fireEvent.click(btn("Append"));
-    expect(status()).toContain("4 proxies");
-    expect(status()).toContain("Added 2 proxies to the end");
-    fireEvent.click(btn("Save"));
-    await waitFor(() => expect(saves.length).toBe(1));
-    expect(saves[0].text).toBe(`${A}\r\n${B}\r\n${C}\r\nlocalhost`);
-  });
-
-  it("a paste of only blank lines can't be applied", async () => {
-    backend({ "p.txt": A });
-    await open("p.txt");
-    paste("  \n\r\n");
-    expect(btn("Replace").disabled).toBe(true);
-    expect(btn("Append").disabled).toBe(true);
-  });
-
-  it("warns on odd pasted lines (by line in the box) but still applies them", async () => {
-    backend({ "p.txt": A });
-    await open("p.txt");
-    paste(`${B}\n\nbad line\nh:99999`);
-    const region = screen.getByRole("region", { name: "Paste a list" });
-    expect(region.textContent).toContain("3 proxies · 2 odd lines");
-    const odd = within(screen.getByRole("list", { name: "Odd pasted lines" }))
-      .getAllByRole("listitem")
-      .map((li) => li.textContent);
-    expect(odd).toEqual([expect.stringMatching(/^Line 3: .*space/), expect.stringMatching(/^Line 4: .*port/)]);
-    fireEvent.click(btn("Replace"));
-    expect(status()).toContain("3 proxies · 2 odd lines");
-    expect(btn("Save").disabled).toBe(false);
-  });
-
-  it("lists at most 10 odd pasted lines", async () => {
-    backend({ "p.txt": A });
-    await open("p.txt");
-    paste(Array.from({ length: 15 }, (_, i) => `bad${i}`).join("\n"));
-    const items = within(screen.getByRole("list", { name: "Odd pasted lines" })).getAllByRole("listitem");
-    expect(items.length).toBe(11);
-    expect(items[10].textContent).toBe("…and 5 more");
   });
 });
 

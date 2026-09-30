@@ -2,9 +2,9 @@
 //   host:port
 //   host:port:user:pass
 //   localhost
-// A file is only rewritten by an edit (replace, append, shuffle). Loading and
-// saving without one writes the exact bytes back, because the store keeps the
-// text as read. Each edit keeps the file's BOM, line ending and final newline.
+// A file is only rewritten by an edit (typing in the editor, shuffle). Loading
+// and saving without one writes the exact bytes back, because the store keeps
+// the text as read. Each edit keeps the file's BOM and line ending.
 import { splitLines } from "./csvTable";
 
 export interface ProxyFile {
@@ -72,31 +72,23 @@ export function oddLines(lines: readonly string[]): OddLine[] {
   return odd;
 }
 
-/** Pasted text as proxy lines: each line trimmed, blank lines dropped. */
-export function cleanPasted(pasted: string): string[] {
-  const text = pasted.startsWith("﻿") ? pasted.slice(1) : pasted;
-  return splitLines(text)
-    .map((l) => l.text.trim())
-    .filter((l) => l !== "");
-}
-
-/** The file with `lines` as its whole contents (BOM, line ending and final newline kept). */
-export function replaceProxies(fileText: string, lines: readonly string[]): string {
-  return serializeProxies({ ...parseProxies(fileText), lines: [...lines] });
+/** The file as shown in the editor: no BOM, "\n" line endings (what a text box uses). */
+export function toEditorText(fileText: string): string {
+  const body = fileText.startsWith("﻿") ? fileText.slice(1) : fileText;
+  return body.replace(/\r\n/g, "\n");
 }
 
 /**
- * The file with `lines` added to the end. The existing text is kept byte for
- * byte; a missing final line ending is added between. The final newline style
- * (present or absent) is kept.
+ * Editor text back to file text in the style of `fileText`: its BOM, and its
+ * line ending (CRLF, or LF for an LF-only file) on every line. The text is
+ * kept as typed otherwise, including a final line ending or none. If the editor
+ * text hasn't changed, `fileText` is returned exactly (even with mixed endings).
  */
-export function appendProxies(fileText: string, lines: readonly string[]): string {
-  if (lines.length === 0) return fileText;
+export function fromEditorText(editorText: string, fileText: string): string {
+  const value = editorText.replace(/\r\n?/g, "\n");
+  if (value === toEditorText(fileText)) return fileText;
   const p = parseProxies(fileText);
-  const body = p.bom ? fileText.slice(1) : fileText;
-  if (body === "") return serializeProxies({ ...p, lines: [...lines] });
-  const joint = p.trailingNewline ? "" : p.eol;
-  return fileText + joint + lines.join(p.eol) + (p.trailingNewline ? p.eol : "");
+  return (p.bom ? "﻿" : "") + (p.eol === "\n" ? value : value.replace(/\n/g, "\r\n"));
 }
 
 /**
