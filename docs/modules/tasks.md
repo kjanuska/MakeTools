@@ -187,7 +187,7 @@ The user doesn't edit tasks one row at a time. They think of a task file as a **
   - The builder starts again from the file whenever its rows change (apply, discard or restore).
   - "Add site…" isn't offered in the builder. Sites are added in the grid or in Settings.
 - **Views:** a file opens on Tasks, or on Raw rows when opened from the overview search. The last view is remembered per file for the session.
-- **Tests:** 811 task and shared frontend tests, and 42 Rust.
+- **Tests:** 809 frontend and 42 Rust.
   - Algorithm tests cover the user's examples, exact totals, evenness per profile, independence of proxy group and mode, overrides, interleaving and determinism.
   - The `inferPlan` round trip is tested, along with `replaceRecords` (BOM, CRLF, a missing trailing newline, unparseable lines), the summary and builder UI, and real-file checks for all 78 task files.
 
