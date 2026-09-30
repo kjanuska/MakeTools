@@ -172,15 +172,22 @@ The user doesn't edit tasks one row at a time. They think of a task file as a **
   - Tasks per profile are shown per group, as a share of the group.
   - Rows that can't be counted (`ALL` in an unknown group, or an empty profileName) are flagged.
 - **The builder:**
-  - Profile group: pick the group, type a total (spread evenly), and optionally set tasks per profile.
-  - Each input has a % and "Own splits…" for overrides. Each field has a default split with "Add value" and "Even %".
+  - The builder has three numbered steps: 1 Profiles, 2 Inputs, 3 Splits for every input. Each profile group, the inputs and each split sit in their own card.
+  - **Profile groups:** pick the group, then fill in the **Total tasks** field, which is highlighted and spread evenly. Tasks can also be set per profile. The grand total is shown under the groups.
+  - **Inputs:** each input has a % and "Custom splits…" for its own splits.
+  - **Field names:** fields show readable names such as "Proxy Group" and "Cart Quantity", with a short hint under each. The file keeps its own column names.
+  - **% lists** (inputs and every split):
+    - A dashed **"+"** row adds a row, and × removes one.
+    - **"Distribute evenly"** keeps the %s equal, including when rows are added or removed. It starts ticked when the %s are already equal (one value at 100% counts). Untick it to type %s.
+    - A "Total" note shows when the %s don't add up to 100.
+  - (Changed at the second check on 2026-09-30. It used to have "Add value" and "Even %" buttons and field keys as names.)
   - Problems are listed, and the counts fall back to the file's until they're fixed.
   - "Apply to file" is enabled when the build differs from the file, and makes the change unsaved.
   - "Reset to file" goes back to the file's counts.
   - The builder starts again from the file whenever its rows change (apply, discard or restore).
   - "Add site…" isn't offered in the builder. Sites are added in the grid or in Settings.
 - **Views:** a file opens on Tasks, or on Raw rows when opened from the overview search. The last view is remembered per file for the session.
-- **Tests:** 806 frontend and 42 Rust.
+- **Tests:** 811 task and shared frontend tests, and 42 Rust.
   - Algorithm tests cover the user's examples, exact totals, evenness per profile, independence of proxy group and mode, overrides, interleaving and determinism.
   - The `inferPlan` round trip is tested, along with `replaceRecords` (BOM, CRLF, a missing trailing newline, unparseable lines), the summary and builder UI, and real-file checks for all 78 task files.
 

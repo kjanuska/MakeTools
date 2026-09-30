@@ -931,3 +931,104 @@ button.link {
     max-height: none;
   }
 }
+
+/* Builder cards: each profile group, the inputs and each split sit in their own box. */
+.builder-card {
+  border: 1px solid var(--border);
+  border-left: 4px solid var(--accent);
+  border-radius: 6px;
+  background: var(--panel);
+  padding: 10px 12px;
+  margin: 0 0 10px;
+}
+
+.builder-card h4 {
+  margin: 0;
+  font-size: 1.05em;
+}
+
+.builder-card .hint {
+  margin: 0 0 8px;
+  font-size: 0.9em;
+}
+
+.task-builder h3 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 1.15em;
+}
+
+.task-builder .step {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: var(--accent);
+  color: var(--bg);
+  font-size: 0.85em;
+}
+
+/* A labelled field with its name above it. */
+.builder-row .field {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 0.9em;
+}
+
+.builder-row .field > span {
+  color: var(--muted);
+}
+
+.total-input {
+  width: 120px;
+  font-size: 1.2em;
+  font-weight: 600;
+  padding: 4px 8px;
+  border: 2px solid var(--accent);
+  border-radius: 4px;
+}
+
+.grand-total {
+  font-size: 1.2em;
+  margin: 8px 0 0;
+}
+
+/* "+" that adds a row: a dashed row-sized button under the list. */
+.add-row {
+  display: block;
+  width: 100%;
+  margin: 4px 0;
+  padding: 2px 0;
+  border: 1px dashed var(--border);
+  border-radius: 4px;
+  background: transparent;
+  color: var(--accent);
+  font-size: 1.2em;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.add-row:hover {
+  border-color: var(--accent);
+  background: var(--accent-bg);
+}
+
+.split-row .remove,
+.builder-row .remove {
+  color: var(--muted);
+}
+
+.percent-item + .percent-item {
+  border-top: 1px solid var(--border);
+  padding-top: 4px;
+}
+
+.split-foot label {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}

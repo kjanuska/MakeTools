@@ -50,8 +50,8 @@ async function openFile(name: string) {
   await screen.findByRole("heading", { name });
   tab("Tasks");
   // ALL rows count once the profile groups are known.
-  await waitFor(() => expect(screen.getByRole("table", { name: "Profile groups" })).toBeTruthy());
-  await waitFor(() => expect((screen.getByLabelText("Profile group") as HTMLSelectElement).value).not.toBe(""));
+  await waitFor(() => expect(screen.getByRole("table", { name: "Profile Groups" })).toBeTruthy());
+  await waitFor(() => expect((screen.getByLabelText("Profile Group") as HTMLSelectElement).value).not.toBe(""));
 }
 
 describe("task counts", () => {
@@ -59,7 +59,7 @@ describe("task counts", () => {
     backend({ "s.csv": taskFile([task(), task({ name: "2", proxy: "us", input: "other", mode: "direct" })]) });
     await openFile("s.csv");
     await waitFor(() => expect(document.querySelector(".breakdown-total")!.textContent).toBe("4 tasks"));
-    expect(table("Profile groups")).toEqual([["25", "4", "100%"]]);
+    expect(table("Profile Groups")).toEqual([["25", "4", "100%"]]);
     expect(table("Profiles in 25")).toEqual([
       ["1", "1", "25%"],
       ["2", "2", "50%"],
@@ -69,7 +69,7 @@ describe("task counts", () => {
       ["box logo -tee", "3", "75%"],
       ["other", "1", "25%"],
     ]);
-    expect(table("Proxy groups")).toEqual([
+    expect(table("Proxy Groups")).toEqual([
       ["wealth", "3", "75%"],
       ["us", "1", "25%"],
     ]);
@@ -116,16 +116,16 @@ describe("task builder", () => {
   it("starts from the file's counts", async () => {
     backend({ "b.csv": taskFile([task(), task({ name: "2", input: "other", proxy: "us" })]) });
     await openFile("b.csv");
-    expect((screen.getByLabelText("Profile group") as HTMLSelectElement).value).toBe("25");
-    expect(field("Profile group 25 tasks").value).toBe("4");
+    expect((screen.getByLabelText("Profile Group") as HTMLSelectElement).value).toBe("25");
+    expect(field("Total tasks for 25").value).toBe("4");
     expect(field("Input 1").value).toBe("box logo -tee");
     expect(field("Input 1 %").value).toBe("75");
     expect(field("Input 2").value).toBe("other");
     expect(field("Input 2 %").value).toBe("25");
-    fireEvent.click(btn("Per profile…"));
+    fireEvent.click(btn("Tasks per profile…"));
     expect(field("25 / 2 tasks").value).toBe("2");
     // The result preview matches the file.
-    expect(table("Proxy groups")).toEqual([
+    expect(table("Proxy Groups")).toEqual([
       ["wealth", "3", "75%"],
       ["us", "1", "25%"],
     ]);
@@ -134,14 +134,16 @@ describe("task builder", () => {
   it("builds a whole file: review, apply as an unsaved change, then save", async () => {
     const { disk, saves } = backend({ "b.csv": taskFile([task()]) });
     await openFile("b.csv");
-    set("Profile group 25 tasks", "6");
-    fireEvent.click(within(screen.getByRole("group", { name: "Default proxyGroup" })).getByRole("button", { name: "Add value" }));
-    set("Default proxyGroup value 2", "us");
-    set("Default proxyGroup value 1 %", "50");
-    set("Default proxyGroup value 2 %", "50");
+    set("Total tasks for 25", "6");
+    // "+" adds a row; one value at 100% counts as evenly distributed, so the two get 50% each.
+    fireEvent.click(btn("Add Proxy Group (all inputs)"));
+    set("Proxy Group (all inputs) 2", "us");
+    expect(field("Proxy Group (all inputs) 1 %").value).toBe("50");
+    expect(field("Proxy Group (all inputs) 2 %").value).toBe("50");
+    expect(field("Proxy Group (all inputs) 2 %").disabled).toBe(true);
     set("Input 1", "  box   logo ");
     // The counts show how the file would change.
-    expect(table("Proxy groups")).toEqual([
+    expect(table("Proxy Groups")).toEqual([
       ["wealth", "3", "50%"],
       ["us", "0 → 3", "50%"],
     ]);
@@ -176,17 +178,20 @@ describe("task builder", () => {
     expect(rows.every((r) => r[C.input] === "box logo" && r[C.site] === "kith.com" && r[C.delay] === "3000")).toBe(true);
   });
 
-  it("problems block the review, with a list of what to fix", async () => {
+  it("problems block applying, with a list of what to fix", async () => {
     backend({ "b.csv": taskFile([task()]) });
     await openFile("b.csv");
-    fireEvent.click(btn("Add input"));
+    // Untick "Distribute evenly" to type %s.
+    fireEvent.click(screen.getByLabelText("Distribute Input evenly"));
+    fireEvent.click(btn("Add Input"));
     set("Input 2", "second");
     set("Input 2 %", "40");
     expect(btn("Apply to file").disabled).toBe(true);
     const problems = within(screen.getByRole("list", { name: "Problems" }));
     expect(problems.getByText("Input %s must add up to 100.")).toBeTruthy();
-    fireEvent.click(within(screen.getByText("Add input").parentElement!).getByRole("button", { name: "Even %" }));
+    fireEvent.click(screen.getByLabelText("Distribute Input evenly"));
     expect(field("Input 1 %").value).toBe("50");
+    expect(field("Input 2 %").value).toBe("50");
     expect(screen.queryByRole("list", { name: "Problems" })?.textContent).toBeUndefined();
     expect(btn("Apply to file").disabled).toBe(false);
   });
@@ -194,9 +199,9 @@ describe("task builder", () => {
   it("an input can override a split for itself", async () => {
     const { disk, saves } = backend({ "b.csv": taskFile([task({ name: "1" }), task({ name: "1", input: "cards" })]) });
     await openFile("b.csv");
-    fireEvent.click(screen.getAllByRole("button", { name: "Own splits…" })[1]);
-    fireEvent.click(screen.getByLabelText("Own site split"));
-    set("Input 2 site value 1", "shop.topps.com");
+    fireEvent.click(screen.getAllByRole("button", { name: "Custom splits…" })[1]);
+    fireEvent.click(screen.getByLabelText("Custom Site split"));
+    set("Site for input 2 1", "shop.topps.com");
     fireEvent.click(btn("Apply to file"));
     fireEvent.click(await screen.findByRole("button", { name: "Save" }));
     await waitFor(() => expect(saves()).toHaveLength(1));
@@ -212,22 +217,59 @@ describe("task builder: starting again", () => {
     await openFile("r.csv");
     expect(btn("Apply to file").disabled).toBe(true);
     expect(btn("Reset to file").disabled).toBe(true);
-    set("Profile group 25 tasks", "9");
+    set("Total tasks for 25", "9");
     expect(btn("Apply to file").disabled).toBe(false);
-    expect(table("Profile groups")).toEqual([["25", "3 → 9", "100%"]]);
+    expect(table("Profile Groups")).toEqual([["25", "3 → 9", "100%"]]);
     fireEvent.click(btn("Reset to file"));
-    expect(field("Profile group 25 tasks").value).toBe("3");
-    expect(table("Profile groups")).toEqual([["25", "3", "100%"]]);
+    expect(field("Total tasks for 25").value).toBe("3");
+    expect(table("Profile Groups")).toEqual([["25", "3", "100%"]]);
   });
 
   it("discarding an applied build shows the file's counts again", async () => {
     backend({ "d.csv": taskFile([task()]) });
     await openFile("d.csv");
-    set("Profile group 25 tasks", "9");
+    set("Total tasks for 25", "9");
     fireEvent.click(btn("Apply to file"));
     await waitFor(() => expect(status()).toContain("Unsaved changes"));
     fireEvent.click(btn("Discard changes"));
     await waitFor(() => expect(status()).not.toContain("Unsaved changes"));
-    expect(field("Profile group 25 tasks").value).toBe("3");
+    expect(field("Total tasks for 25").value).toBe("3");
+  });
+});
+
+describe("task builder: lists", () => {
+  it("distributing evenly keeps %s equal when rows are added and removed", async () => {
+    backend({ "e.csv": taskFile([task()]) });
+    await openFile("e.csv");
+    const even = screen.getByLabelText("Distribute Mode (all inputs) evenly") as HTMLInputElement;
+    expect(even.checked).toBe(true);
+    fireEvent.click(btn("Add Mode (all inputs)"));
+    fireEvent.click(btn("Add Mode (all inputs)"));
+    expect([1, 2, 3].map((i) => field(`Mode (all inputs) ${i} %`).value)).toEqual(["33.33", "33.33", "33.33"]);
+    expect(screen.getAllByText("Total 100%").length).toBeGreaterThan(0);
+    fireEvent.click(btn("Remove Mode (all inputs) 3"));
+    expect([1, 2].map((i) => field(`Mode (all inputs) ${i} %`).value)).toEqual(["50", "50"]);
+    // Unticked: the %s stay and can be typed.
+    fireEvent.click(even);
+    expect(field("Mode (all inputs) 1 %").disabled).toBe(false);
+    set("Mode (all inputs) 1 %", "75");
+    expect(screen.getByText("Total 125% (must be 100%)")).toBeTruthy();
+  });
+
+  it("an uneven split from the file starts unticked", async () => {
+    backend({ "u.csv": taskFile([task(), task(), task({ proxy: "us" })]) });
+    await openFile("u.csv");
+    expect((screen.getByLabelText("Distribute Proxy Group (all inputs) evenly") as HTMLInputElement).checked).toBe(false);
+    expect(field("Proxy Group (all inputs) 1 %").value).toBe("66.67");
+  });
+
+  it("uses readable field names (the file keeps its column names: see the save test)", async () => {
+    backend({ "n.csv": taskFile([task()]) });
+    await openFile("n.csv");
+    const builder = within(document.querySelector<HTMLElement>(".task-builder")!);
+    for (const name of ["Proxy Group", "Mode", "Site", "Size", "Color", "Account Group", "Cart Quantity", "Delay (ms)"]) {
+      expect(builder.getByRole("heading", { name })).toBeTruthy();
+    }
+    expect(builder.queryByRole("heading", { name: "proxyGroup" })).toBeNull();
   });
 });

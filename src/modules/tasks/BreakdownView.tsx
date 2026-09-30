@@ -4,14 +4,14 @@
 import { BREAKDOWN_FIELDS, type Breakdown, type BreakdownField } from "./build";
 
 export const BREAKDOWN_LABELS: Record<BreakdownField, string> = {
-  profileGroup: "Profile groups",
+  profileGroup: "Profile Groups",
   input: "Inputs",
-  proxyGroup: "Proxy groups",
+  proxyGroup: "Proxy Groups",
   mode: "Modes",
   site: "Sites",
   size: "Sizes",
   color: "Colors",
-  accountGroup: "Account groups",
+  accountGroup: "Account Groups",
   cartQuantity: "Cart quantity",
   delay: "Delay (ms)",
 };

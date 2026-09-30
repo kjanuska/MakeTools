@@ -22,6 +22,21 @@ export const SPLIT_FIELDS = [
 
 export type SplitField = (typeof SPLIT_FIELDS)[number];
 
+/** How fields are named in the builder (the file keeps its own column names). */
+export const FIELD_LABELS: Record<TaskField, string> = {
+  profileGroup: "Profile Group",
+  profileName: "Profile",
+  proxyGroup: "Proxy Group",
+  accountGroup: "Account Group",
+  input: "Input",
+  size: "Size",
+  color: "Color",
+  site: "Site",
+  mode: "Mode",
+  cartQuantity: "Cart Quantity",
+  delay: "Delay (ms)",
+};
+
 export interface SplitPart {
   value: string;
   percent: number;
@@ -441,16 +456,17 @@ const sumsTo100 = (percents: readonly number[]) =>
 
 function splitErrors(field: SplitField, split: Split, where: string, ctx: TaskContext): string[] {
   const errors: string[] = [];
-  if (split.length === 0) errors.push(`${where}: ${field} needs at least one value.`);
+  const name = FIELD_LABELS[field];
+  if (split.length === 0) errors.push(`${where}: ${name} needs at least one value.`);
   const seen = new Set<string>();
   for (const p of split) {
     const msg = valueError(field, p.value, ctx);
-    if (msg) errors.push(`${where}: ${field} "${p.value}" ${msg}.`);
-    if (seen.has(p.value)) errors.push(`${where}: ${field} "${p.value}" is listed twice.`);
+    if (msg) errors.push(`${where}: ${name} "${p.value}" ${msg}.`);
+    if (seen.has(p.value)) errors.push(`${where}: ${name} "${p.value}" is listed twice.`);
     seen.add(p.value);
-    if (!(p.percent >= 0)) errors.push(`${where}: ${field} "${p.value}" needs a % of 0 or more.`);
+    if (!(p.percent >= 0)) errors.push(`${where}: ${name} "${p.value}" needs a % of 0 or more.`);
   }
-  if (split.length && !sumsTo100(split.map((p) => p.percent))) errors.push(`${where}: ${field} %s must add up to 100.`);
+  if (split.length && !sumsTo100(split.map((p) => p.percent))) errors.push(`${where}: ${name} %s must add up to 100.`);
   return errors;
 }
 
@@ -487,7 +503,7 @@ export function planErrors(plan: BuildPlan, ctx: TaskContext): string[] {
   }
   if (plan.inputs.length && !sumsTo100(plan.inputs.map((i) => i.percent))) errors.push("Input %s must add up to 100.");
 
-  for (const f of SPLIT_FIELDS) errors.push(...splitErrors(f, plan.defaults[f], "Default", ctx));
+  for (const f of SPLIT_FIELDS) errors.push(...splitErrors(f, plan.defaults[f], "All inputs", ctx));
   for (const i of plan.inputs) {
     for (const f of SPLIT_FIELDS) {
       const split = i.overrides[f];

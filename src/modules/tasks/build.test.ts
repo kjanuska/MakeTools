@@ -394,10 +394,10 @@ describe("planErrors", () => {
 
   it("%s must add up to 100", () => {
     expect(errs((p) => (p.inputs[0].percent = 40))).toContain("Input %s must add up to 100.");
-    expect(errs((p) => (p.defaults.mode[0].percent = 70))).toContain("Default: mode %s must add up to 100.");
+    expect(errs((p) => (p.defaults.mode[0].percent = 70))).toContain("All inputs: Mode %s must add up to 100.");
     expect(
       errs((p) => (p.inputs[0].overrides.site = [{ value: "kith.com", percent: 99 }])),
-    ).toContain('Input "keyword1": site %s must add up to 100.');
+    ).toContain('Input "keyword1": Site %s must add up to 100.');
     expect(
       errs((p) => {
         p.inputs = [1, 2, 3].map((n) => ({ input: `k${n}`, percent: 100 / 3, overrides: {} }));
@@ -407,14 +407,14 @@ describe("planErrors", () => {
 
   it("checks values like the grid does", () => {
     const setDefault = (f: SplitField, value: string) => errs((p) => (p.defaults[f] = one(value)));
-    expect(setDefault("proxyGroup", "nope")).toContain('Default: proxyGroup "nope" isn\'t an existing proxy group.');
-    expect(setDefault("accountGroup", "nope")).toContain('Default: accountGroup "nope" isn\'t an existing account group.');
-    expect(setDefault("site", "nope.com")).toContain('Default: site "nope.com" isn\'t in the site list.');
-    expect(setDefault("mode", "preloadxyz")).toContain('Default: mode "preloadxyz" has parts that aren\'t known modes.');
-    expect(setDefault("cartQuantity", "0")).toContain('Default: cartQuantity "0" must be a whole number, 1 or more.');
-    expect(setDefault("size", "9,10")).toContain('Default: size "9,10" can\'t contain a comma.');
-    expect(setDefault("color", "")).toContain('Default: color "" is required.');
-    expect(errs((p) => (p.defaults.size = [one("9")[0], one("9")[0]]))).toContain('Default: size "9" is listed twice.');
+    expect(setDefault("proxyGroup", "nope")).toContain('All inputs: Proxy Group "nope" isn\'t an existing proxy group.');
+    expect(setDefault("accountGroup", "nope")).toContain('All inputs: Account Group "nope" isn\'t an existing account group.');
+    expect(setDefault("site", "nope.com")).toContain('All inputs: Site "nope.com" isn\'t in the site list.');
+    expect(setDefault("mode", "preloadxyz")).toContain('All inputs: Mode "preloadxyz" has parts that aren\'t known modes.');
+    expect(setDefault("cartQuantity", "0")).toContain('All inputs: Cart Quantity "0" must be a whole number, 1 or more.');
+    expect(setDefault("size", "9,10")).toContain('All inputs: Size "9,10" can\'t contain a comma.');
+    expect(setDefault("color", "")).toContain('All inputs: Color "" is required.');
+    expect(errs((p) => (p.defaults.size = [one("9")[0], one("9")[0]]))).toContain('All inputs: Size "9" is listed twice.');
     expect(errs((p) => (p.inputs[0].input = "a,b"))).toContain('Input "a,b" can\'t contain a comma.');
     expect(errs((p) => (p.inputs[1].input = " keyword1 "))).toContain('Input "keyword1" is listed twice.');
   });
