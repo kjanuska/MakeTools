@@ -6,12 +6,14 @@ interface Props {
   file: FileEntry;
   open: boolean;
   onToggle: () => void;
-  /** Stage this backup as unsaved changes. */
+  /** Stage this backup as unsaved changes (or, with `note` saying so, restore it). */
   onRestore: (backup: BackupEntry) => void;
+  /** Replaces the text explaining what Restore does. */
+  note?: string;
 }
 
 /** "Backups" button with a dropdown of this file's backups. */
-export function BackupsMenu({ file, open, onToggle, onRestore }: Props) {
+export function BackupsMenu({ file, open, onToggle, onRestore, note }: Props) {
   const [backups, setBackups] = useState<BackupEntry[] | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -33,8 +35,8 @@ export function BackupsMenu({ file, open, onToggle, onRestore }: Props) {
       {open && (
         <div className="backups-dropdown" role="dialog" aria-label="Backups">
           <p className="muted">
-            A backup is made on every save and kept for 7 days. Restoring loads it as unsaved changes. Nothing is written
-            until you save.
+            {note ??
+              "A backup is made on every save and kept for 7 days. Restoring loads it as unsaved changes. Nothing is written until you save."}
           </p>
           {error && <p className="error">{error}</p>}
           {!backups && !error && <p className="muted">Loading…</p>}

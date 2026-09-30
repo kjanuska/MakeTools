@@ -27,7 +27,7 @@ Status: **built, awaiting user check** (2026-09-30). The user described the scop
   - Existing bytes are never changed. New lines use the file's most common line ending (CRLF for an empty file or a tie), and a missing final line ending is added before them.
   - Newly added rows are highlighted until the page is left.
 - **Overview**: every group with accounts, accounts with a proxy, main email domain and status (OK / N unrecognized lines / Couldn't read), plus totals. **New account group** creates an empty `<name>.txt` (`create_file`, never overwrites). The name rules are the same as for profile groups.
-- **Backups**: the page lists the file's backups. A restore is written right away (the current version is backed up first).
+- **Backups**: a Backups ▾ dropdown in the page header, the same one the other modules use, which also opens with the Backups shortcut (user, 2026-09-30). Accounts have no unsaved state, so after a confirmation a restore is written right away instead of being staged. The current version is backed up first.
 
 ## Not included (not asked for)
 Editing or deleting single accounts, renaming, copying or deleting groups, moving accounts between groups, and changes in the Changes panel (imports save immediately).

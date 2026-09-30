@@ -248,23 +248,30 @@ describe("file panel", () => {
 });
 
 describe("backups", () => {
+  /** Opens an account file and its Backups dropdown. */
+  async function openBackups() {
+    await openAccountFile();
+    fireEvent.click(await screen.findByRole("button", { name: "Backups ▾" }));
+    return screen.getByRole("dialog", { name: "Backups" });
+  }
+
   it("lists backups newest first", async () => {
     const calls = backend();
     render(<App />);
-    await openAccountFile();
+    const menu = await openBackups();
 
-    const rows = await within(await screen.findByRole("region", { name: "Backups" })).findAllByRole("row");
-    // header + 2 backups
-    expect(rows).toHaveLength(3);
-    expect(rows[1].textContent).toContain(formatDateTime(BACKUPS[0].createdMs));
-    expect(rows[2].textContent).toContain(formatDateTime(BACKUPS[1].createdMs));
+    const rows = await within(menu).findAllByRole("row");
+    expect(rows).toHaveLength(2);
+    expect(rows[0].textContent).toContain(formatDateTime(BACKUPS[0].createdMs));
+    expect(rows[1].textContent).toContain(formatDateTime(BACKUPS[1].createdMs));
+    expect(within(menu).getByText(/Restoring replaces the file right away/)).toBeTruthy();
     expect(callsOf(calls, "list_backups")).toEqual([{ path: ACCOUNT_FILE.path }]);
   });
 
   it("says when there are no backups", async () => {
     backend({ list_backups: () => [] });
     render(<App />);
-    await openAccountFile();
+    await openBackups();
     expect(await screen.findByText("No backups for this file yet.")).toBeTruthy();
   });
 
@@ -272,7 +279,7 @@ describe("backups", () => {
     vi.mocked(confirmAction).mockResolvedValue(true);
     const calls = backend();
     render(<App />);
-    await openAccountFile();
+    await openBackups();
 
     const restoreButtons = await screen.findAllByRole("button", { name: "Restore" });
     const reads = () => callsOf(calls, "read_text").filter((a) => a.path === ACCOUNT_FILE.path).length;
@@ -285,17 +292,18 @@ describe("backups", () => {
     expect(confirmAction).toHaveBeenCalledWith(expect.stringContaining(`popmart.txt with the backup from ${when}`), "Restore backup");
     expect(callsOf(calls, "restore_backup")).toEqual([{ path: ACCOUNT_FILE.path, id: BACKUPS[1].id }]);
     await waitFor(() => {
-      expect(callsOf(calls, "list_backups")).toHaveLength(2);
       expect(reads()).toBeGreaterThan(readsBefore);
       expect(callsOf(calls, "list_files")).toHaveLength(8);
     });
+    // The dropdown closes after a restore.
+    expect(screen.queryByRole("dialog", { name: "Backups" })).toBeNull();
   });
 
   it("does nothing when the restore is cancelled", async () => {
     vi.mocked(confirmAction).mockResolvedValue(false);
     const calls = backend();
     render(<App />);
-    await openAccountFile();
+    await openBackups();
 
     fireEvent.click((await screen.findAllByRole("button", { name: "Restore" }))[0]);
 
@@ -312,7 +320,7 @@ describe("backups", () => {
       },
     });
     render(<App />);
-    await openAccountFile();
+    await openBackups();
 
     fireEvent.click((await screen.findAllByRole("button", { name: "Restore" }))[0]);
 

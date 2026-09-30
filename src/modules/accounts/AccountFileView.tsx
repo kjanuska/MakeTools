@@ -1,10 +1,14 @@
 // One account group: its accounts as a table, with counts, search and import.
-// Importing appends lines through save_text (backup first); nothing else is written.
+// Importing appends lines through save_text and restoring goes through
+// restore_backup; both back up the current file first. Nothing else is written.
 import { useCallback, useEffect, useState } from "react";
 import { accountsOf, appendLines, hasProxy, oddLines, parseAccounts, planImport, type AccountsDoc } from "../../lib/formats/accounts";
-import { readText, saveText, type FileEntry } from "../../lib/fs";
+import { BackupsMenu } from "../../components/table/BackupsMenu";
+import { confirmAction } from "../../lib/dialogs";
+import { formatDateTime } from "../../lib/format";
+import { readText, restoreBackup, saveText, type BackupEntry, type FileEntry } from "../../lib/fs";
+import { useShortcuts } from "../../lib/shortcuts";
 import { groupNameOf } from "../../lib/table/fileNames";
-import { BackupsPanel } from "../../shell/BackupsPanel";
 import { ImportPanel } from "./ImportPanel";
 import { accountStats, domainOf, plural } from "./stats";
 import "./accounts.css";
@@ -34,6 +38,8 @@ export function AccountFileView({ file, onBack, onChanged }: Props) {
   const [proxyFilter, setProxyFilter] = useState<ProxyFilter>(null);
   const [domainFilter, setDomainFilter] = useState<ReadonlySet<string>>(new Set());
   const [allDomains, setAllDomains] = useState(false);
+  const [backupsOpen, setBackupsOpen] = useState(false);
+  useShortcuts({ backups: () => setBackupsOpen((o) => !o) });
   // Lines from here on were just imported, and are marked.
   const [newFrom, setNewFrom] = useState<number | null>(null);
 
@@ -85,11 +91,44 @@ export function AccountFileView({ file, onBack, onChanged }: Props) {
     }
   }
 
+  // Accounts have no unsaved state, so a restore is written right away (the
+  // current version is backed up first, so it can be undone the same way).
+  async function restore(b: BackupEntry) {
+    const when = formatDateTime(b.createdMs);
+    const ok = await confirmAction(
+      `Replace ${file.name} with the backup from ${when}?\n\nThe current version is backed up first, so this can be undone.`,
+      "Restore backup",
+    );
+    if (!ok) return;
+    setBusy(true);
+    setError(null);
+    setMessage(null);
+    try {
+      await restoreBackup(file.path, b.id);
+      setMessage(`Restored the backup from ${when}.`);
+      setBackupsOpen(false);
+      setNewFrom(null);
+      await load();
+      onChanged();
+    } catch (e) {
+      setError(`Restore failed: ${e}`);
+    } finally {
+      setBusy(false);
+    }
+  }
+
   const head = (
     <div className="editor-head">
       <button onClick={onBack}>← All account groups</button>
       <h2>{file.name}</h2>
       <span className="spacer" />
+      <BackupsMenu
+        file={file}
+        open={backupsOpen}
+        onToggle={() => setBackupsOpen((o) => !o)}
+        onRestore={(b) => void restore(b)}
+        note="A backup is made on every import and restore, and kept for 7 days. Restoring replaces the file right away; the current version is backed up first, so it can be undone."
+      />
       <button className="primary" aria-pressed={importing} onClick={() => setImporting((o) => !o)}>
         Import accounts…
       </button>
@@ -276,15 +315,6 @@ export function AccountFileView({ file, onBack, onChanged }: Props) {
           </div>
         </>
       )}
-
-      <BackupsPanel
-        file={file}
-        onRestored={() => {
-          setNewFrom(null);
-          void load();
-          onChanged();
-        }}
-      />
     </div>
   );
 }
