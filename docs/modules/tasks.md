@@ -191,6 +191,12 @@ The user doesn't edit tasks one row at a time. They think of a task file as a **
   - (Changed at the second check on 2026-09-30. It used to have "Add value" and "Even %" buttons and field keys as names.)
   - Problems are listed, and the counts fall back to the file's until they're fixed.
   - "Apply to file" is enabled when the build differs from the file, and makes the change unsaved.
+  - **Sticky header:** the file name, Backups, the tabs, one toolbar and the status line stay at the top while the builder scrolls.
+    - The toolbar reads: Apply to file, Reset to file | Save, Discard changes.
+    - Next to the buttons it shows either the "Replaces every task row…" note or "N problems to fix", which is a link that scrolls to the list under the builder.
+    - The builder puts its buttons there through a React portal, so its state stays in the builder.
+    - The counts panel sticks just below the header, whose height is measured into `--task-head-h`.
+    - (From the sixth check on 2026-09-30.)
   - "Reset to file" goes back to the file's counts.
   - The builder starts again from the file whenever its rows change (apply, discard or restore).
   - **Applied plans are remembered** for the session. While a file still has exactly the rows a build produced, the builder shows that plan as it was left, custom splits included. A file only holds counts, so reading it back can't always tell which input had the custom split (for example, two equal inputs on different sites). After a restart, or once the rows change (discard, restore, hand edits), the builder reads the file again. On a tie, the earlier input keeps the defaults and the later one gets the custom split. (Fix from the third check on 2026-09-30: after Apply and Save, a custom split per keyword wasn't shown any more.)

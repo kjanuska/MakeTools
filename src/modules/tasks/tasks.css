@@ -83,3 +83,48 @@
   text-align: right;
   padding: 2px 0;
 }
+
+/*
+ * The task file's header (file name, tabs, Apply/Reset and Save/Discard,
+ * status) stays at the top of the scrolling main area. The negative margins
+ * cancel .main's padding, so the header starts at the very top and its
+ * background covers the full width.
+ */
+.task-head {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  margin: -16px -20px 12px;
+  padding: 16px 20px 6px;
+  background: var(--bg);
+  border-bottom: 1px solid var(--border);
+}
+
+.task-head .editor-status {
+  margin: 6px 0 0;
+}
+
+/* The builder's buttons sit in the header toolbar as if they were its own. */
+.builder-actions-slot {
+  display: contents;
+}
+
+.builder-note {
+  font-size: 0.9em;
+}
+
+button.link.error {
+  color: var(--error);
+}
+
+/* The counts panel sticks just below the header (its height is measured into --task-head-h). */
+.task-file .task-layout > .task-counts {
+  top: var(--task-head-h, 0px);
+  max-height: calc(100vh - var(--task-head-h, 0px) - 40px);
+}
+
+@media (max-width: 1100px) {
+  .task-file .task-layout > .task-counts {
+    max-height: none;
+  }
+}

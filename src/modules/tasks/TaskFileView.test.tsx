@@ -433,3 +433,46 @@ describe("task builder: an input's splits dialog", () => {
     expect(screen.getAllByRole("button", { name: "Custom splits…" })).toHaveLength(2);
   });
 });
+
+describe("task file header", () => {
+  it("holds Apply to file and Reset to file next to Save, in the sticky header", async () => {
+    backend({ "h.csv": taskFile([task()]) });
+    await openFile("h.csv");
+    const head = document.querySelector(".task-head")!;
+    const bar = within(screen.getByRole("toolbar", { name: "Task file actions" }));
+    expect(head.contains(screen.getByRole("toolbar", { name: "Task file actions" }))).toBe(true);
+    expect(bar.getAllByRole("button").map((b) => b.textContent)).toEqual([
+      "Apply to file",
+      "Reset to file",
+      "Save",
+      "Discard changes",
+    ]);
+    // The file name and tabs are in the header too; the builder isn't.
+    expect(within(head as HTMLElement).getByRole("heading", { name: "h.csv" })).toBeTruthy();
+    expect(within(head as HTMLElement).getByRole("tab", { name: "Tasks" })).toBeTruthy();
+    expect(head.contains(screen.getByLabelText("Total tasks for 25"))).toBe(false);
+    // Only one set of builder buttons.
+    expect(screen.getAllByRole("button", { name: "Apply to file" })).toHaveLength(1);
+
+    set("Total tasks for 25", "6");
+    expect(bar.getByText(/Replaces every task row with 6 generated rows/)).toBeTruthy();
+    fireEvent.click(bar.getByRole("button", { name: "Apply to file" }));
+    await waitFor(() => expect(status()).toContain("Unsaved changes"));
+    expect(bar.getByRole("button", { name: "Save" }).hasAttribute("disabled")).toBe(false);
+  });
+
+  it("shows how many problems there are, with a link to the list", async () => {
+    backend({ "h.csv": taskFile([task()]) });
+    await openFile("h.csv");
+    fireEvent.click(screen.getByLabelText("Distribute Input evenly"));
+    set("Input 1 %", "40");
+    const bar = within(screen.getByRole("toolbar", { name: "Task file actions" }));
+    const link = bar.getByRole("button", { name: "1 problem to fix" });
+    const list = screen.getByRole("list", { name: "Problems" });
+    const scrolled = vi.fn();
+    list.scrollIntoView = scrolled;
+    fireEvent.click(link);
+    expect(scrolled).toHaveBeenCalled();
+    expect(document.querySelector(".task-head")!.contains(list)).toBe(false);
+  });
+});

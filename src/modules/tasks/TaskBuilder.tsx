@@ -3,6 +3,7 @@
 // (shared by every input unless an input overrides it). Next to it are the
 // task counts it gives, compared with the file as it is now.
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 import { Cell } from "../../components/table/cells";
 import type { CellType, TableUI } from "../../components/table/types";
 import { TASK_COL as C, TASK_FIELDS } from "../../lib/formats/tasks";
@@ -28,6 +29,8 @@ import type { TaskContext } from "./schema";
 
 interface Props {
   initial: BuildPlan;
+  /** Where to put Apply to file / Reset to file (the file's sticky header); inline if none. */
+  actionsSlot?: HTMLElement | null;
   ctx: TaskContext;
   ui: TableUI<TaskContext>;
   /** The file's counts now. */
@@ -456,7 +459,7 @@ function GroupEditor({
   );
 }
 
-export function TaskBuilder({ initial, ctx, ui, before, onApply, onReset }: Props) {
+export function TaskBuilder({ initial, actionsSlot, ctx, ui, before, onApply, onReset }: Props) {
   const [plan, setPlan] = useState<BuildPlan>(initial);
   /** The input whose splits are open in the dialog, and its overrides when it opened (for Cancel). */
   const [editing, setEditing] = useState<{ k: number; saved: InputPlan["overrides"] } | null>(null);
@@ -474,6 +477,34 @@ export function TaskBuilder({ initial, ctx, ui, before, onApply, onReset }: Prop
   };
   const total = planTotal(plan);
   const changed = !!after && JSON.stringify(after) !== JSON.stringify(before);
+  const problemsRef = useRef<HTMLUListElement>(null);
+
+  const actions = (
+    <>
+      <button className="primary" disabled={!rows || !changed} onClick={() => rows && onApply(rows, plan)}>
+        Apply to file
+      </button>
+      <button disabled={plan === initial} onClick={onReset}>
+        Reset to file
+      </button>
+      {errors.length > 0 ? (
+        <button
+          className="link error"
+          onClick={() => problemsRef.current?.scrollIntoView?.({ behavior: "smooth", block: "center" })}
+        >
+          {plural(errors.length, "problem", "problems")} to fix
+        </button>
+      ) : (
+        rows &&
+        changed && (
+          <span className="muted builder-note">
+            Replaces every task row with {plural(rows.length, "generated row", "generated rows")}. Nothing is written
+            until you save.
+          </span>
+        )
+      )}
+    </>
+  );
 
   return (
     <div className="task-layout">
@@ -558,22 +589,9 @@ export function TaskBuilder({ initial, ctx, ui, before, onApply, onReset }: Prop
           </div>
         </section>
 
-        <div className="toolbar builder-actions">
-          <button className="primary" disabled={!rows || !changed} onClick={() => rows && onApply(rows, plan)}>
-            Apply to file
-          </button>
-          <button disabled={plan === initial} onClick={onReset}>
-            Reset to file
-          </button>
-          {rows && changed && (
-            <span className="muted">
-              Replaces every task row with {plural(rows.length, "generated row", "generated rows")}. Nothing is written
-              until you save.
-            </span>
-          )}
-        </div>
+        {actionsSlot ? createPortal(actions, actionsSlot) : <div className="toolbar builder-actions">{actions}</div>}
         {errors.length > 0 && (
-          <ul className="error builder-errors" aria-label="Problems">
+          <ul className="error builder-errors" aria-label="Problems" ref={problemsRef}>
             {errors.map((e, i) => (
               <li key={i}>{e}</li>
             ))}

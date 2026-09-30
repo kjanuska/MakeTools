@@ -38,6 +38,18 @@ function docVersion(doc: object): number {
   return id;
 }
 
+/** An element's height, kept up to date as it changes (0 where ResizeObserver isn't available). */
+function useElementHeight(el: HTMLElement | null): number {
+  const [height, setHeight] = useState(0);
+  useEffect(() => {
+    if (!el || typeof ResizeObserver === "undefined") return;
+    const ro = new ResizeObserver(() => setHeight(el.offsetHeight));
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [el]);
+  return height;
+}
+
 /** The view each file was last shown in, so coming back to a file (e.g. from Settings) keeps it. */
 const lastView = new Map<string, View>();
 
@@ -64,6 +76,11 @@ export function TaskFileView(props: Props) {
   };
   const [backupsOpen, setBackupsOpen] = useState(false);
   const [resets, setResets] = useState(0);
+  /** Where the builder puts its Apply/Reset buttons: the sticky header's toolbar. */
+  const [actionsSlot, setActionsSlot] = useState<HTMLElement | null>(null);
+  const [head, setHead] = useState<HTMLDivElement | null>(null);
+  // The counts panel sticks just below the header.
+  const headHeight = useElementHeight(head);
   const { error, status, setStatus, saving, save, discard, restore } = useFileActions(
     store,
     file,
@@ -132,49 +149,55 @@ export function TaskFileView(props: Props) {
   }
 
   return (
-    <div className="task-file">
-      <div className="editor-head">
-        <button onClick={onBack}>← All task files</button>
-        <h2>{file.name}</h2>
-        <span className="spacer" />
-        <BackupsMenu
-          file={file}
-          open={backupsOpen}
-          onToggle={() => setBackupsOpen((o) => !o)}
-          onRestore={restoreBackup}
-        />
-      </div>
-      {tabs}
-      {error && <p className="error">{error}</p>}
-      {readOnly ? (
-        <p className="error">
-          This file's header doesn't match the task format, so it's open read-only and can't be rebuilt. Expected:{" "}
-          <code>{headerOf(ui.schema.format)}</code>
-        </p>
-      ) : (
-        <>
-          <div className="toolbar">
-            <button className="primary" disabled={!canSave} onClick={save}>
-              {saving ? "Saving…" : "Save"}
-            </button>
-            <button disabled={!dirty || saving} onClick={discard}>
-              Discard changes
-            </button>
-          </div>
-          <p className="editor-status" role="status">
-            {errorCount > 0 ? (
-              <span className="error">
-                {errorCount} {errorCount === 1 ? "error" : "errors"}: fix {errorCount === 1 ? "it" : "them"} in Raw rows
-                (or rebuild) to save
-              </span>
-            ) : (
-              <span className="muted">No errors</span>
-            )}
-            {dirty && <span className="unsaved"> · Unsaved changes</span>}
-            {status && <span className="status"> · {status}</span>}
+    <div className="task-file" style={{ ["--task-head-h" as string]: `${headHeight}px` }}>
+      {/* Stays at the top while the builder scrolls: file, tabs, and the Apply/Save buttons. */}
+      <div className="task-head" ref={setHead}>
+        <div className="editor-head">
+          <button onClick={onBack}>← All task files</button>
+          <h2>{file.name}</h2>
+          <span className="spacer" />
+          <BackupsMenu
+            file={file}
+            open={backupsOpen}
+            onToggle={() => setBackupsOpen((o) => !o)}
+            onRestore={restoreBackup}
+          />
+        </div>
+        {tabs}
+        {error && <p className="error">{error}</p>}
+        {readOnly ? (
+          <p className="error">
+            This file's header doesn't match the task format, so it's open read-only and can't be rebuilt. Expected:{" "}
+            <code>{headerOf(ui.schema.format)}</code>
           </p>
-        </>
-      )}
+        ) : (
+          <>
+            <div className="toolbar" role="toolbar" aria-label="Task file actions">
+              {/* The builder puts Apply to file / Reset to file here. */}
+              <span className="builder-actions-slot" ref={setActionsSlot} />
+              <span className="toolbar-sep" />
+              <button className="primary" disabled={!canSave} onClick={save}>
+                {saving ? "Saving…" : "Save"}
+              </button>
+              <button disabled={!dirty || saving} onClick={discard}>
+                Discard changes
+              </button>
+            </div>
+            <p className="editor-status" role="status">
+              {errorCount > 0 ? (
+                <span className="error">
+                  {errorCount} {errorCount === 1 ? "error" : "errors"}: fix {errorCount === 1 ? "it" : "them"} in Raw
+                  rows (or rebuild) to save
+                </span>
+              ) : (
+                <span className="muted">No errors</span>
+              )}
+              {dirty && <span className="unsaved"> · Unsaved changes</span>}
+              {status && <span className="status"> · {status}</span>}
+            </p>
+          </>
+        )}
+      </div>
 
       {readOnly ? (
         <BreakdownView b={summary} />
@@ -183,6 +206,7 @@ export function TaskFileView(props: Props) {
           // Starts again from the file whenever the file's rows change (apply, discard, restore) or on Reset.
           key={`${ctx.ready}:${docVersion(entry.doc)}:${resets}`}
           initial={plan}
+          actionsSlot={actionsSlot}
           ctx={ctx}
           ui={ui}
           before={summary}
