@@ -31,6 +31,8 @@ import { GroupsOverview } from "./modules/profiles/GroupsOverview";
 import { ProfilesEditor } from "./modules/profiles/ProfilesEditor";
 import { confirmOverwrite } from "./modules/profiles/prompts";
 import { ProfileStore } from "./modules/profiles/store";
+import { ProxyFileView } from "./modules/proxies/ProxyFileView";
+import { ProxyStore } from "./modules/proxies/store";
 import { buildTaskContext, contextKey } from "./modules/tasks/context";
 import { renameSiteEverywhere, siteUsage, usedSites } from "./modules/tasks/sites";
 import { TaskStore } from "./modules/tasks/store";
@@ -53,6 +55,7 @@ export default function App() {
   const [error, setError] = useState<string | null>(null);
   const [profileStore] = useState(() => new ProfileStore());
   const [taskStore] = useState(() => new TaskStore());
+  const [proxyStore] = useState(() => new ProxyStore());
   const [savingAll, setSavingAll] = useState(false);
   const [changesMessage, setChangesMessage] = useState<string | null>(null);
   // Row to jump to when a file is opened from the overview search.
@@ -68,6 +71,7 @@ export default function App() {
   const [tasksScanned, setTasksScanned] = useState(false);
   const profileVersion = useStoreVersion(profileStore);
   useStoreVersion(taskStore);
+  useStoreVersion(proxyStore);
   const folders = useFolders(root, listVersion);
 
   const stores: Partial<Record<ModuleId, TableStore<never>>> = {
@@ -200,13 +204,17 @@ export default function App() {
     // Registered once; everything it uses is stable (stores, state setters).
   }, []);
 
-  const allDirty = () => [...profileStore.dirtyEntries(), ...taskStore.dirtyEntries()];
+  const allDirty = () => [...profileStore.dirtyEntries(), ...taskStore.dirtyEntries(), ...proxyStore.dirtyEntries()];
 
   /** Saves every changed file without errors. True if nothing is left unsaved. */
   async function saveAll(): Promise<{ ok: boolean; summary: string }> {
     setSavingAll(true);
     setChangesMessage(null);
-    const results = [await profileStore.saveAll(confirmOverwrite), await taskStore.saveAll(confirmOverwrite)];
+    const results = [
+      await profileStore.saveAll(confirmOverwrite),
+      await taskStore.saveAll(confirmOverwrite),
+      { ...(await proxyStore.saveAll(confirmOverwrite)), invalid: [] },
+    ];
     setSavingAll(false);
     setListVersion((v) => v + 1);
     const saved = results.reduce((n, r) => n + r.saved.length, 0);
@@ -237,6 +245,7 @@ export default function App() {
     if (choice === "discard") {
       for (const e of profileStore.dirtyEntries()) profileStore.discard(e.file.path);
       for (const e of taskStore.dirtyEntries()) taskStore.discard(e.file.path);
+      for (const e of proxyStore.dirtyEntries()) proxyStore.discard(e.file.path);
       return true;
     }
     const { ok, summary } = await saveAll();
@@ -271,6 +280,12 @@ export default function App() {
   }
 
   function openChanged(path: string) {
+    const proxy = proxyStore.get(path);
+    if (proxy) {
+      setModuleId("proxies");
+      openFile(proxy.file);
+      return;
+    }
     const id = (["profiles", "tasks"] as const).find((m) => stores[m]!.get(path));
     if (!id) return;
     setModuleId(id);
@@ -294,14 +309,22 @@ export default function App() {
   const dir = joinPath(root, mod.folder);
   const list = folders[mod.id];
   const store = stores[mod.id];
-  const changed = (["profiles", "tasks"] as const).flatMap((m) =>
-    stores[m]!.dirtyEntries().map((e) => ({
+  const changed = [
+    ...(["profiles", "tasks"] as const).flatMap((m) =>
+      stores[m]!.dirtyEntries().map((e) => ({
+        path: e.file.path,
+        name: e.file.name,
+        folder: folderOf(m),
+        invalid: e.errorCount > 0,
+      })),
+    ),
+    ...proxyStore.dirtyEntries().map((e) => ({
       path: e.file.path,
       name: e.file.name,
-      folder: folderOf(m),
-      invalid: e.errorCount > 0,
+      folder: folderOf("proxies"),
+      invalid: false,
     })),
-  );
+  ];
 
   let main;
   if (settingsOpen) {
@@ -383,6 +406,18 @@ export default function App() {
         onFilesChanged={() => setListVersion((v) => v + 1)}
       />
     );
+  } else if (mod.id === "proxies") {
+    main = selected ? (
+      <ProxyFileView
+        key={selected.path}
+        file={selected}
+        store={proxyStore}
+        confirmOverwrite={confirmOverwrite}
+        onSaved={() => setListVersion((v) => v + 1)}
+      />
+    ) : (
+      <p className="muted">Select a proxy file.</p>
+    );
   } else {
     main = selected ? (
       <FilePanel key={selected.path} file={selected} onChanged={() => setListVersion((v) => v + 1)} />
@@ -433,7 +468,9 @@ export default function App() {
         onSelect={(f) => openFile(f)}
         onRefresh={() => setListVersion((v) => v + 1)}
         marker={
-          store
+          mod.id === "proxies"
+            ? (f) => (proxyStore.get(f.path)?.dirty ? { modified: true } : undefined)
+            : store
             ? (f) => {
                 const e = store.get(f.path);
                 if (!e) return store.loadError(f.path) ? { invalid: true } : undefined;

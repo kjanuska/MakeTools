@@ -8,6 +8,7 @@ import path from "node:path";
 import { afterAll, describe, expect, it } from "vitest";
 import { accountsOf, appendLines, oddLines, parseAccounts } from "./accounts";
 import { parseProfiles, serializeProfiles } from "./profiles";
+import * as proxyFormat from "./proxies";
 import { cleanInputs, joinBrokenLines, parseTasks, serializeTasks, TASK_COL } from "./tasks";
 import { breakdown, generateRows, inferPlan, SPLIT_FIELDS } from "../../modules/tasks/build";
 import { taskCount, type TaskContext } from "../../modules/tasks/schema";
@@ -169,5 +170,56 @@ describe.skipIf(!accounts.available)("real account files (temporary copies)", ()
     const diff = firstDifference(bytes, prefix);
     expect(diff, `${name}: first difference at byte ${diff}`).toBe(-1);
     expect(accountsOf(parseAccounts(out)).length).toBe(count + 1);
+  });
+});
+
+const proxies = realFolder("proxy", ".txt");
+
+describe.skipIf(!proxies.available)("real proxy files (temporary copies)", () => {
+  afterAll(proxies.cleanup);
+  const { appendProxies, countProxies, oddLines: oddProxies, parseProxies, replaceProxies, shuffleProxies } = proxyFormat;
+
+  it("finds proxy files", () => {
+    expect(proxies.names.length).toBeGreaterThan(0);
+  });
+
+  it.each(proxies.names)("%s: every line is a proxy, and each counts", (name) => {
+    const text = proxies.read(name).toString("utf8");
+    const p = parseProxies(text);
+    expect(oddProxies(p.lines).length, `${name}: odd lines`).toBe(0);
+    expect(countProxies(p)).toBe(p.lines.length);
+  });
+
+  it.each(proxies.names)("%s: replacing with the same lines gives the same bytes", (name) => {
+    const bytes = proxies.read(name);
+    const text = bytes.toString("utf8");
+    const out = Buffer.from(replaceProxies(text, parseProxies(text).lines), "utf8");
+    const diff = firstDifference(bytes, out);
+    expect(diff, `${name}: first difference at byte ${diff}`).toBe(-1);
+  });
+
+  it.each(proxies.names)("%s: shuffling keeps every line, the line endings and the final newline", (name) => {
+    const text = proxies.read(name).toString("utf8");
+    const before = parseProxies(text);
+    const out = shuffleProxies(text);
+    const after = parseProxies(out);
+    expect(out.length).toBe(text.length);
+    expect(after.eol).toBe(before.eol);
+    expect(after.trailingNewline).toBe(before.trailingNewline);
+    expect(after.bom).toBe(before.bom);
+    // Compared as sorted lists; never printed.
+    const same = [...after.lines].sort().join("\n") === [...before.lines].sort().join("\n");
+    expect(same, `${name}: lines differ after shuffling`).toBe(true);
+    const unchanged = after.lines.join("\n") === before.lines.join("\n");
+    if (before.lines.length > 1) expect(unchanged, `${name}: order didn't change`).toBe(false);
+  });
+
+  it.each(proxies.names)("%s: appending keeps every existing byte", (name) => {
+    const bytes = proxies.read(name);
+    const text = bytes.toString("utf8");
+    const out = appendProxies(text, ["203.0.113.9:8080"]);
+    const diff = firstDifference(bytes, Buffer.from(out, "utf8").subarray(0, bytes.length));
+    expect(diff, `${name}: first difference at byte ${diff}`).toBe(-1);
+    expect(countProxies(parseProxies(out))).toBe(countProxies(parseProxies(text)) + 1);
   });
 });

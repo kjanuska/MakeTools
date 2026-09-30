@@ -193,7 +193,7 @@ describe("modules and file list", () => {
     await openAccountFile();
     expect(await screen.findByRole("heading", { name: "popmart.txt" })).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Proxies" }));
-    expect(await screen.findByText("Select a file.")).toBeTruthy();
+    expect(await screen.findByText("Select a proxy file.")).toBeTruthy();
   });
 });
 

@@ -1032,3 +1032,90 @@ button.link {
   align-items: center;
   gap: 4px;
 }
+
+/* Proxies */
+
+.proxy-count {
+  font-size: 15px;
+}
+
+.proxy-file .warn {
+  color: var(--changed);
+}
+
+.proxy-layout {
+  display: flex;
+  gap: 20px;
+  align-items: flex-start;
+  flex-wrap: wrap;
+}
+
+.proxy-list-section {
+  flex: 1 1 420px;
+  min-width: 0;
+}
+
+.proxy-filter {
+  display: block;
+  margin-bottom: 6px;
+}
+
+.proxy-list {
+  height: calc(100vh - 230px);
+  min-height: 240px;
+  overflow: auto;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  font-family: Consolas, "Cascadia Mono", monospace;
+  font-size: 13px;
+}
+
+.proxy-row {
+  position: absolute;
+  left: 0;
+  right: 0;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 0 8px;
+  white-space: pre;
+}
+
+.proxy-row .ln {
+  flex: 0 0 5ch;
+  text-align: right;
+  color: var(--muted);
+  user-select: none;
+}
+
+.proxy-row.odd {
+  background: var(--changed-bg);
+}
+
+.proxy-row .why {
+  color: var(--changed);
+  font-family: "Segoe UI", system-ui, sans-serif;
+  font-size: 12px;
+}
+
+.proxy-paste {
+  flex: 0 1 380px;
+}
+
+.proxy-paste h3 {
+  margin: 0 0 6px;
+}
+
+.proxy-paste textarea {
+  width: 100%;
+  height: 260px;
+  resize: vertical;
+  font-family: Consolas, "Cascadia Mono", monospace;
+  font-size: 13px;
+}
+
+.proxy-odd {
+  margin: 0 0 8px;
+  padding-left: 18px;
+  color: var(--changed);
+}

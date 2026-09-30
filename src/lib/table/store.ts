@@ -299,6 +299,6 @@ export class TableStore<Ctx = unknown> {
 }
 
 /** Re-renders the caller whenever the store changes. */
-export function useStoreVersion<C>(store: TableStore<C>): number {
+export function useStoreVersion(store: Pick<TableStore, "subscribe" | "getVersion">): number {
   return useSyncExternalStore(store.subscribe, store.getVersion);
 }

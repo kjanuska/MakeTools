@@ -5,10 +5,18 @@ import { useState } from "react";
 import { confirmAction } from "../../lib/dialogs";
 import { formatDateTime } from "../../lib/format";
 import { readBackup, type BackupEntry, type FileEntry } from "../../lib/fs";
-import type { ConfirmOverwrite, TableStore } from "../../lib/table/store";
+import type { ConfirmOverwrite, SaveResult } from "../../lib/table/store";
 
-export function useFileActions<Ctx>(
-  store: TableStore<Ctx>,
+/** What the actions need from a store (the table store, or the proxies store). */
+export interface FileActionsStore {
+  save(path: string, confirmOverwrite: ConfirmOverwrite): Promise<SaveResult>;
+  discard(path: string): void;
+  get(path: string): { dirty: boolean } | undefined;
+  stage(path: string, text: string): { ok: true } | { ok: false; error: string };
+}
+
+export function useFileActions(
+  store: FileActionsStore,
   file: FileEntry,
   confirmOverwrite: ConfirmOverwrite,
   onSaved: () => void,
