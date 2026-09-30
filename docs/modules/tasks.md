@@ -155,6 +155,32 @@ The user doesn't edit tasks one row at a time. They think of a task file as a **
 ### Open questions (3b)
 - Which mode parts can combine, and in what order (still open from 3a).
 
+### Build notes (3b, 2026-09-30)
+- **Code:**
+  - Logic in `src/modules/tasks/build.ts`: `apportion`, `allocate`, `interleave`, `generateRows`, `inferPlan`, `breakdown`, `planErrors`.
+  - UI in `TaskFileView.tsx` (Summary / Builder / Raw rows tabs), `TaskBuilder.tsx` and `BreakdownView.tsx`.
+  - `replaceRecords` in `src/lib/table/ops.ts` writes the generated rows. Save, discard and restore-a-backup moved into `components/table/useFileActions.ts`, which the grid and the summary both use.
+- **How counts are worked out:**
+  - Tasks per input = the input %s applied to the total.
+  - For each field, the inputs sharing the default split have it applied to their combined tasks, so the totals per value are exact. The result is then shared out between those inputs. An input with its own split has it applied to its own tasks.
+  - Within an input, the fields are crossed one at a time, which keeps them independent (each proxy group gets the same mode mix).
+  - Profiles get each input's value combinations in proportion to their tasks. Rounding extras go where a profile has had too few of a value so far, so each profile's mix stays within about 1 task of its exact share.
+- **Row order:** profiles take turns (1, 2, 3, 1, 2, 3…). Each profile's tasks alternate between inputs, and within an input between value combinations.
+- **Reading a file back:** inputs share a field's default while it reproduces their counts. Otherwise the input furthest from the default gets its own split. Rebuilding from a file without changes gives the same counts per profile, per input and per input × value. This was checked on all 78 real task files.
+- **The summary:**
+  - Each field's table shows count, share and a bar. Tasks per profile are shown per group, as a share of the group.
+  - Rows that can't be counted (`ALL` in an unknown group, or an empty profileName) are flagged.
+- **The builder:**
+  - Profile group: pick the group, type a total (spread evenly), and optionally set tasks per profile.
+  - Each input has a % and "Own splits…" for overrides. Each field has a default split with "Add value" and "Even %".
+  - Problems are listed, and Review stays disabled until they're fixed.
+  - Review shows before → after counts, and Apply makes the change unsaved.
+  - "Add site…" isn't offered in the builder. Sites are added in the grid or in Settings.
+- **Views:** a file opens on Summary, or on Raw rows when opened from the overview search. The last view is remembered per file for the session.
+- **Tests:** 804 frontend and 42 Rust.
+  - Algorithm tests cover the user's examples, exact totals, evenness per profile, independence of proxy group and mode, overrides, interleaving and determinism.
+  - The `inferPlan` round trip is tested, along with `replaceRecords` (BOM, CRLF, a missing trailing newline, unparseable lines), the summary and builder UI, and real-file checks for all 78 task files.
+
 ## Later (3b and beyond)
 - **Offer to update tasks** when a profile group is renamed or a profileName changes. Later, the same for proxy and account groups. (The user agreed on 2026-09-23.)
 - Which mode parts can combine, and in what order.
