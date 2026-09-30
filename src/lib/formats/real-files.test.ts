@@ -7,7 +7,9 @@ import os from "node:os";
 import path from "node:path";
 import { afterAll, describe, expect, it } from "vitest";
 import { parseProfiles, serializeProfiles } from "./profiles";
-import { cleanInputs, joinBrokenLines, parseTasks, serializeTasks } from "./tasks";
+import { cleanInputs, joinBrokenLines, parseTasks, serializeTasks, TASK_COL } from "./tasks";
+import { breakdown, generateRows, inferPlan, SPLIT_FIELDS } from "../../modules/tasks/build";
+import { taskCount, type TaskContext } from "../../modules/tasks/schema";
 
 const root = process.env.MAKEBOT_DIR ?? path.resolve(__dirname, "../../../Makebot");
 
@@ -31,6 +33,7 @@ function realFolder(sub: string) {
   };
   const cleanup = () => {
     if (tmp) fs.rmSync(tmp, { recursive: true, force: true });
+    tmp = "";
   };
   return { available, names, read, cleanup };
 }
@@ -78,6 +81,64 @@ describe.skipIf(!tasks.available)("real task files (temporary copies)", () => {
     const before = bytesWithout(tasks.read(name).toString("utf8"));
     const after = bytesWithout(serializeTasks(doc));
     expect(after === before, `${name}: fixes changed more than spaces, quotes and line breaks`).toBe(true);
+  });
+});
+
+describe.skipIf(!tasks.available || !profiles.available)("real task files: builder (temporary copies)", () => {
+  afterAll(() => {
+    tasks.cleanup();
+    profiles.cleanup();
+  });
+
+  const ctx = (): TaskContext => ({
+    ready: true,
+    profileGroups: new Map(
+      profiles.names.map((n) => {
+        const doc = parseProfiles(profiles.read(n).toString("utf8"));
+        const names = doc.rows.flatMap((r) => (r.kind === "record" ? [r.values[0]] : []));
+        return [n.replace(/\.csv$/i, ""), names];
+      }),
+    ),
+    proxyGroups: new Set(),
+    accountGroups: new Set(),
+    sites: [],
+  });
+
+  const rowsOf = (name: string) =>
+    cleanInputs(joinBrokenLines(parseTasks(tasks.read(name).toString("utf8")))).rows.flatMap((r) =>
+      r.kind === "record" ? [r.values] : [],
+    );
+
+  /** Tasks per profile, per input and per input × field value; no values are reported on failure. */
+  const counts = (rows: string[][], c: TaskContext) => {
+    const b = breakdown(rows, c);
+    const perInput = b.by.input.map(({ value }) => {
+      const own = breakdown(
+        rows.filter((r) => r[TASK_COL.input] === value),
+        c,
+      );
+      return [value, SPLIT_FIELDS.map((f) => own.by[f].map((x) => `${x.value}=${x.count}`).sort())];
+    });
+    return JSON.stringify({
+      profiles: [...b.profiles].map(([g, l]) => [g, l.map((x) => `${x.value}=${x.count}`).sort()]).sort(),
+      inputs: perInput.sort(),
+    });
+  };
+
+  it.each(tasks.names)("%s: breakdown total matches the task counts", (name) => {
+    const c = ctx();
+    const rows = rowsOf(name);
+    const b = breakdown(rows, c);
+    const known = rows.map((r) => taskCount(r, c)).filter((n): n is number => n !== null);
+    expect(b.total, `${name}: total`).toBe(known.reduce((a, n) => a + n, 0));
+    expect(b.unknownRows, `${name}: unknown rows`).toBe(rows.length - known.length);
+  });
+
+  it.each(tasks.names)("%s: rebuilding from the inferred plan keeps every count", (name) => {
+    const c = ctx();
+    const rows = rowsOf(name);
+    const rebuilt = generateRows(inferPlan(rows, c));
+    expect(counts(rebuilt, c) === counts(rows, c), `${name}: counts changed`).toBe(true);
   });
 });
 

@@ -26,7 +26,7 @@ export const EMPTY_TASK_CONTEXT: TaskContext = {
 const C = TASK_COL;
 
 /** Checks that need other files: groups, profiles, sites, mode parts. */
-function linkError(field: string, values: readonly string[], ctx: TaskContext): string | null {
+export function linkError(field: string, values: readonly string[], ctx: TaskContext): string | null {
   const v = values[TASK_FIELDS.indexOf(field as (typeof TASK_FIELDS)[number])];
   switch (field) {
     case "profileGroup":
