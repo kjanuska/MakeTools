@@ -124,8 +124,38 @@ Profiles and tasks are both unquoted CSVs with a fixed header. The CSV parser, t
   - After the automatic fixes, every row parses, including `drift.csv`.
   - The fixes change nothing but spaces, quotes and line breaks.
 
+## 3b: task builder and file summary
+Interview on 2026-09-30. The user approved the plan the same day, which serves as approval of this section.
+
+### Why
+The user doesn't edit tasks one row at a time. They think of a task file as a **plan**: which profiles run how many tasks, which inputs get what share, and how each input is split across proxy groups, modes and the other fields. So a task file now opens as a **summary**, and a **builder** generates the whole file from a plan. The 3a row grid is still there behind **Advanced: raw rows**.
+
+### Decisions
+| Topic | Decision |
+|---|---|
+| Output | The builder generates **every task row** of a file, either a new file or replacing an existing file's rows. |
+| Row style | **One row per task** with a named profileName. The builder never writes `ALL`, but `ALL` rows in older files are still read, and count as the group's profile count. |
+| Profile groups | A build can include **several profile groups**. Each has a total and per-profile counts, which default to an even spread and can be edited (uneven is fine). |
+| Inputs | A list of inputs, each with a **%** of the total. The input mix applies to the whole build, so every profile gets the same mix. |
+| Other fields | proxyGroup, mode, accountGroup, size, color, site, cartQuantity and delay are each a **% split of values**. Each field has a **shared default split** that every input uses, and an input can **override** it. |
+| Mode values | Full mode strings built with the mode-parts editor, e.g. 75% `preloadwait` and 25% `direct`. |
+| Crossing | The splits are independent and **evenly crossed**. Every profile gets the same input mix, and within an input each field's split is independent of the others (e.g. every proxy group gets the same mode mix). |
+| Rounding | Largest remainder, so the totals are always exact. The live view shows the actual counts. |
+| Row order | **Interleaved**: profiles, inputs and values are spread through the file. |
+| Re-editing | The builder **reads the plan back from the file's rows**. Nothing is stored outside the task file. A hand-made file that isn't evenly crossed is evened out when it's rebuilt, and the confirm step shows the before and after counts. |
+| Views | A live breakdown in the builder and a summary per file. The overview across files stays as it is. |
+| Proxies | Only **tasks per proxy group** are shown. Proxy files aren't read. |
+
+### Writing the file
+- Applying a build replaces the file's task rows. The header, BOM and line endings stay as they are, and unparseable lines are kept (still flagged).
+- The change is a normal **unsaved change**: it's validated, listed under Unsaved changes, and saved with a backup like any other edit.
+- A confirm step shows the counts before and after.
+- The builder is disabled for read-only files (wrong header).
+
+### Open questions (3b)
+- Which mode parts can combine, and in what order (still open from 3a).
+
 ## Later (3b and beyond)
-- Batch operations and views (the user will describe them).
 - **Offer to update tasks** when a profile group is renamed or a profileName changes. Later, the same for proxy and account groups. (The user agreed on 2026-09-23.)
 - Which mode parts can combine, and in what order.
 - More validation for input.
