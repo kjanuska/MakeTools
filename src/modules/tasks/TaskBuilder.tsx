@@ -112,7 +112,7 @@ function SumNote({ percents }: { percents: number[] }) {
 /**
  * A list of rows that each get a %: a "+" row to add one, × to remove one,
  * and "Distribute evenly", which keeps the %s equal (also when rows are
- * added or removed) until it's unticked.
+ * added or removed) until it's unticked, which puts the earlier %s back.
  */
 function PercentList<T extends { percent: number }>({
   items,
@@ -133,6 +133,12 @@ function PercentList<T extends { percent: number }>({
   renderAfter?: (item: T, i: number, set: (part: Partial<T>) => void) => ReactNode;
 }) {
   const [even, setEven] = useState(() => isEven(items.map((x) => x.percent)));
+  /**
+   * Each row's % from before "Distribute evenly" was ticked, put back when it's
+   * unticked. Kept in step with the rows: removed rows drop out, and added rows
+   * (null) keep their even share. Null for the whole list if it started even.
+   */
+  const [saved, setSaved] = useState<(number | null)[] | null>(null);
   const spread = (list: T[]) => (even ? list.map((x, i) => ({ ...x, percent: evenPercents(list.length)[i] })) : list);
   const setAt = (i: number) => (part: Partial<T>) => onChange(items.map((x, j) => (j === i ? { ...x, ...part } : x)));
 
@@ -154,7 +160,10 @@ function PercentList<T extends { percent: number }>({
               aria-label={`Remove ${label} ${i + 1}`}
               title="Remove this row"
               disabled={items.length === 1}
-              onClick={() => onChange(spread(items.filter((_, j) => j !== i)))}
+              onClick={() => {
+                setSaved((s) => s && s.filter((_, j) => j !== i));
+                onChange(spread(items.filter((_, j) => j !== i)));
+              }}
             >
               ×
             </button>
@@ -166,7 +175,10 @@ function PercentList<T extends { percent: number }>({
         className="add-row"
         aria-label={`Add ${label}`}
         title="Add a row"
-        onClick={() => onChange(spread([...items, newItem()]))}
+        onClick={() => {
+          setSaved((s) => s && [...s, null]);
+          onChange(spread([...items, newItem()]));
+        }}
       >
         +
       </button>
@@ -178,7 +190,13 @@ function PercentList<T extends { percent: number }>({
             checked={even}
             onChange={(e) => {
               setEven(e.target.checked);
-              if (e.target.checked) onChange(items.map((x, i) => ({ ...x, percent: evenPercents(items.length)[i] })));
+              if (e.target.checked) {
+                setSaved(items.map((x) => x.percent));
+                onChange(items.map((x, i) => ({ ...x, percent: evenPercents(items.length)[i] })));
+              } else if (saved) {
+                onChange(items.map((x, i) => ({ ...x, percent: saved[i] ?? x.percent })));
+                setSaved(null);
+              }
             }}
           />{" "}
           Distribute evenly

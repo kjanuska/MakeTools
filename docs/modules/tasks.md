@@ -186,7 +186,7 @@ The user doesn't edit tasks one row at a time. They think of a task file as a **
   - **Field names:** fields show readable names such as "Proxy Group" and "Cart Quantity", with a short hint under each. The file keeps its own column names.
   - **% lists** (inputs and every split):
     - A dashed **"+"** row adds a row, and × removes one.
-    - **"Distribute evenly"** keeps the %s equal, including when rows are added or removed. It starts ticked when the %s are already equal (one value at 100% counts). Untick it to type %s.
+    - **"Distribute evenly"** keeps the %s equal, including when rows are added or removed. It starts ticked when the %s are already equal (one value at 100% counts). Unticking it puts back each row's % from before it was ticked: rows removed meanwhile drop out, and rows added meanwhile keep their even share. A list that started even keeps its %s. Then the %s can be typed. (Revert added at the user's request on 2026-09-30.)
     - A "Total" note shows when the %s don't add up to 100.
   - (Changed at the second check on 2026-09-30. It used to have "Add value" and "Even %" buttons and field keys as names.)
   - Problems are listed, and the counts fall back to the file's until they're fixed.

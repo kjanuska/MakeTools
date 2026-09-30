@@ -277,6 +277,36 @@ describe("task builder: lists", () => {
     expect(screen.getByText("Total 125% (must be 100%)")).toBeTruthy();
   });
 
+  it("unticking Distribute evenly puts back the %s from before it was ticked", async () => {
+    backend({ "u.csv": taskFile([task(), task(), task({ proxy: "us" })]) });
+    await openFile("u.csv");
+    const pct = (i: number) => field(`Proxy Group (all inputs) ${i} %`).value;
+    const even = () => screen.getByLabelText("Distribute Proxy Group (all inputs) evenly");
+    expect([pct(1), pct(2)]).toEqual(["66.67", "33.33"]);
+    fireEvent.click(even());
+    expect([pct(1), pct(2)]).toEqual(["50", "50"]);
+    fireEvent.click(even());
+    expect([pct(1), pct(2)]).toEqual(["66.67", "33.33"]);
+    // Back to exactly the file's split: nothing to apply.
+    expect(btn("Apply to file").disabled).toBe(true);
+  });
+
+  it("rows added while ticked keep their even share; removed rows drop out", async () => {
+    backend({ "u.csv": taskFile([task(), task(), task({ proxy: "us" })]) });
+    await openFile("u.csv");
+    const pct = (i: number) => field(`Proxy Group (all inputs) ${i} %`).value;
+    const even = () => screen.getByLabelText("Distribute Proxy Group (all inputs) evenly");
+    fireEvent.click(even());
+    fireEvent.click(btn("Add Proxy Group (all inputs)"));
+    expect([1, 2, 3].map(pct)).toEqual(["33.33", "33.33", "33.33"]);
+    fireEvent.click(btn("Remove Proxy Group (all inputs) 1"));
+    expect([1, 2].map(pct)).toEqual(["50", "50"]);
+    fireEvent.click(even());
+    // The "us" row gets its 33.33 back; the added row keeps its 50.
+    expect([1, 2].map(pct)).toEqual(["33.33", "50"]);
+    expect(screen.getByText("Total 83.33% (must be 100%)")).toBeTruthy();
+  });
+
   it("an uneven split from the file starts unticked", async () => {
     backend({ "u.csv": taskFile([task(), task(), task({ proxy: "us" })]) });
     await openFile("u.csv");
