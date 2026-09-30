@@ -10,11 +10,17 @@ export interface AccountStats {
   domains: { domain: string; count: number }[];
 }
 
+/** Lowercased part after the last @, or "" if there's no @ (values aren't checked). */
+export function domainOf(email: string): string {
+  const at = email.lastIndexOf("@");
+  return at < 0 ? "" : email.slice(at + 1).toLowerCase();
+}
+
 export function accountStats(doc: AccountsDoc): AccountStats {
   const list = accountsOf(doc);
   const byDomain = new Map<string, number>();
   for (const a of list) {
-    const domain = a.email.slice(a.email.lastIndexOf("@") + 1).toLowerCase();
+    const domain = domainOf(a.email);
     byDomain.set(domain, (byDomain.get(domain) ?? 0) + 1);
   }
   return {

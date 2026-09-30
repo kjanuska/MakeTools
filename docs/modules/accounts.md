@@ -14,7 +14,12 @@ Status: **built, awaiting user check** (2026-09-30). The user described the scop
 
 ## Operations
 - **View** a group: summary cards (accounts, with/without a proxy, email domains), a table with line number, email, password, proxy `host:port`, and the proxy user and password (those two columns appear only when some account has them). Passwords aren't hidden. Clicking a value selects it for copying.
-- **Search** by email, proxy host or proxy user, and filter by All / With proxy / Without proxy.
+- **Filter** by clicking the summary cards (user, 2026-09-30). Each one is a toggle:
+  - "with a proxy" and "without a proxy" (turning one on turns the other off);
+  - any number of email domains, matching any of those selected ("(no domain)" for emails without an `@`).
+  - The domain card lists the top 6 domains plus any selected ones, and has "+N more" / "Show fewer".
+  - Filters combine with each other and with search. "Clear filters" turns them all off.
+- **Search** by email, proxy host or proxy user.
 - **Import**: paste lines, or load a `.txt` file (added to what's already pasted). The preview counts the accounts to add and lists lines not in the format with their line numbers and part counts.
   - Only parsing, no other checks (user, 2026-09-30): there's no deduplication, and lines are added exactly as pasted, without trimming.
   - Blank lines are ignored. Lines without 2, 4 or 6 parts are skipped.

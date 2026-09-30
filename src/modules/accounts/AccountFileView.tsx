@@ -6,7 +6,7 @@ import { readText, saveText, type FileEntry } from "../../lib/fs";
 import { groupNameOf } from "../../lib/table/fileNames";
 import { BackupsPanel } from "../../shell/BackupsPanel";
 import { ImportPanel } from "./ImportPanel";
-import { accountStats, plural } from "./stats";
+import { accountStats, domainOf, plural } from "./stats";
 import "./accounts.css";
 
 interface Props {
@@ -16,9 +16,11 @@ interface Props {
   onChanged: () => void;
 }
 
-type ProxyFilter = "all" | "with" | "without";
+type ProxyFilter = "with" | "without" | null;
 
 const TOP_DOMAINS = 6;
+
+const domainLabel = (d: string) => d || "(no domain)";
 
 export function AccountFileView({ file, onBack, onChanged }: Props) {
   const [doc, setDoc] = useState<AccountsDoc | null>(null);
@@ -28,7 +30,10 @@ export function AccountFileView({ file, onBack, onChanged }: Props) {
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [query, setQuery] = useState("");
-  const [proxyFilter, setProxyFilter] = useState<ProxyFilter>("all");
+  // Filters set by clicking the summary cards; each one toggles.
+  const [proxyFilter, setProxyFilter] = useState<ProxyFilter>(null);
+  const [domainFilter, setDomainFilter] = useState<ReadonlySet<string>>(new Set());
+  const [allDomains, setAllDomains] = useState(false);
   // Lines from here on were just imported, and are marked.
   const [newFrom, setNewFrom] = useState<number | null>(null);
 
@@ -108,11 +113,25 @@ export function AccountFileView({ file, onBack, onChanged }: Props) {
     const a = l.account;
     if (proxyFilter === "with" && !hasProxy(a)) return [];
     if (proxyFilter === "without" && hasProxy(a)) return [];
-    if (q && ![a.email, a.proxyHost ?? "", a.proxyUser ?? ""].some((v) => v.toLowerCase().includes(q))) return [];
+    if (domainFilter.size > 0 && !domainFilter.has(domainOf(a.email))) return [];
+    if (q &&![a.email, a.proxyHost ?? "", a.proxyUser ?? ""].some((v) => v.toLowerCase().includes(q))) return [];
     return [l];
   });
   const odd = oddLines(doc);
   const anyAuth = accountsOf(doc).some((a) => a.proxyUser !== undefined);
+  const filtered = proxyFilter !== null || domainFilter.size > 0;
+  const toggleProxy = (f: "with" | "without") => setProxyFilter((cur) => (cur === f ? null : f));
+  const toggleDomain = (d: string) =>
+    setDomainFilter((cur) => {
+      const next = new Set(cur);
+      if (!next.delete(d)) next.add(d);
+      return next;
+    });
+  // The top domains, plus any selected ones so a filter never hides its own toggle.
+  const listedDomains = allDomains
+    ? stats.domains
+    : stats.domains.filter((d, i) => i < TOP_DOMAINS || domainFilter.has(d.domain));
+  const hiddenDomains = stats.domains.length - listedDomains.length;
 
   return (
     <div className="accounts-view">
@@ -125,26 +144,47 @@ export function AccountFileView({ file, onBack, onChanged }: Props) {
           <span className="accounts-card-value">{stats.accounts}</span>
           <span className="muted">{stats.accounts === 1 ? "account" : "accounts"}</span>
         </div>
-        <div className="accounts-card">
+        <button
+          className="accounts-card selectable"
+          aria-pressed={proxyFilter === "with"}
+          title="Show only accounts with a proxy (click again to clear)"
+          onClick={() => toggleProxy("with")}
+        >
           <span className="accounts-card-value">{stats.withProxy}</span>
           <span className="muted">with a proxy</span>
-        </div>
-        <div className="accounts-card">
+        </button>
+        <button
+          className="accounts-card selectable"
+          aria-pressed={proxyFilter === "without"}
+          title="Show only accounts without a proxy (click again to clear)"
+          onClick={() => toggleProxy("without")}
+        >
           <span className="accounts-card-value">{stats.accounts - stats.withProxy}</span>
           <span className="muted">without a proxy</span>
-        </div>
+        </button>
         {stats.domains.length > 0 && (
           <div className="accounts-card accounts-domains">
             <span className="muted">Email domains</span>
             <ul aria-label="Email domains">
-              {stats.domains.slice(0, TOP_DOMAINS).map((d) => (
+              {listedDomains.map((d) => (
                 <li key={d.domain}>
-                  <span>{d.domain}</span>
-                  <span className="num">{d.count}</span>
+                  <button
+                    className="domain-toggle"
+                    aria-pressed={domainFilter.has(d.domain)}
+                    title={`Show only ${domainLabel(d.domain)} accounts (click again to clear)`}
+                    onClick={() => toggleDomain(d.domain)}
+                  >
+                    <span>{domainLabel(d.domain)}</span>
+                    <span className="num">{d.count}</span>
+                  </button>
                 </li>
               ))}
-              {stats.domains.length > TOP_DOMAINS && (
-                <li className="muted">+{plural(stats.domains.length - TOP_DOMAINS, "more domain")}</li>
+              {(hiddenDomains > 0 || allDomains) && stats.domains.length > TOP_DOMAINS && (
+                <li>
+                  <button className="link" onClick={() => setAllDomains((a) => !a)}>
+                    {allDomains ? "Show fewer" : `+${plural(hiddenDomains, "more domain")}`}
+                  </button>
+                </li>
               )}
             </ul>
           </div>
@@ -187,22 +227,20 @@ export function AccountFileView({ file, onBack, onChanged }: Props) {
               value={query}
               onChange={(e) => setQuery(e.target.value)}
             />
-            <div className="view-tabs" role="group" aria-label="Proxy filter">
-              {(
-                [
-                  ["all", "All"],
-                  ["with", "With proxy"],
-                  ["without", "Without proxy"],
-                ] as const
-              ).map(([id, label]) => (
-                <button key={id} aria-pressed={proxyFilter === id} onClick={() => setProxyFilter(id)}>
-                  {label}
-                </button>
-              ))}
-            </div>
             <span className="muted">
               {shown.length === stats.accounts ? plural(stats.accounts, "account") : `${shown.length} of ${stats.accounts}`}
             </span>
+            {filtered && (
+              <button
+                className="link"
+                onClick={() => {
+                  setProxyFilter(null);
+                  setDomainFilter(new Set());
+                }}
+              >
+                Clear filters
+              </button>
+            )}
           </div>
           <div className="accounts-table-wrap">
             <table className="accounts-table" aria-label="Accounts">

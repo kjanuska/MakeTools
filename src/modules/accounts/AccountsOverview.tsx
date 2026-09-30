@@ -132,7 +132,7 @@ export function AccountsOverview({ files, dir, onOpen, onFilesChanged }: Props) 
                 </td>
                 <td className="num">{s?.accounts ?? ""}</td>
                 <td className="num">{s?.withProxy ?? ""}</td>
-                <td className="muted">{top ? `${top.domain} (${top.count})` : ""}</td>
+                <td className="muted">{top ? `${top.domain || "(no domain)"} (${top.count})` : ""}</td>
                 <td className={bad ? "error" : "muted"}>{status}</td>
               </tr>
             );

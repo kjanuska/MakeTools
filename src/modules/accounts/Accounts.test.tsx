@@ -161,25 +161,95 @@ describe("account group page", () => {
     expect(accountRows().map((r) => r[0])).toEqual(["1", "4"]);
   });
 
-  it("searches and filters by proxy", async () => {
+  const emails = () => accountRows().map((r) => r[1]);
+  const card = (name: RegExp) => screen.getByRole("button", { name });
+  const WITH = /^\d+with a proxy$/;
+  const WITHOUT = /^\d+without a proxy$/;
+  const domain = (d: string) => within(screen.getByRole("list", { name: "Email domains" })).getByRole("button", { name: new RegExp(`^${d}\\d+$`) });
+
+  it("searches by email, proxy host and proxy user", async () => {
     backend({ [`${ACC}\\popmart.txt`]: POPMART });
     await openGroup("popmart");
     fireEvent.change(screen.getByLabelText("Search accounts"), { target: { value: "GMAIL" } });
-    expect(accountRows().map((r) => r[1])).toEqual(["a.one@gmail.com", "b.two@gmail.com"]);
+    expect(emails()).toEqual(["a.one@gmail.com", "b.two@gmail.com"]);
     expect(screen.getByText("2 of 3")).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: "With proxy" }));
-    expect(accountRows().map((r) => r[1])).toEqual(["b.two@gmail.com"]);
     fireEvent.change(screen.getByLabelText("Search accounts"), { target: { value: "5.6.7" } });
-    expect(accountRows().map((r) => r[1])).toEqual(["c.three@yahoo.com"]);
+    expect(emails()).toEqual(["c.three@yahoo.com"]);
+    fireEvent.change(screen.getByLabelText("Search accounts"), { target: { value: "puser" } });
+    expect(emails()).toEqual(["c.three@yahoo.com"]);
     fireEvent.change(screen.getByLabelText("Search accounts"), { target: { value: "nobody" } });
     expect(screen.getByText("No accounts match.")).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: "All" }));
-    fireEvent.change(screen.getByLabelText("Search accounts"), { target: { value: "puser" } });
-    expect(screen.getByText("1 of 3")).toBeTruthy();
-    expect(accountRows().map((r) => r[1])).toEqual(["c.three@yahoo.com"]);
+  });
+
+  it("filters by proxy from the summary cards, which toggle", async () => {
+    backend({ [`${ACC}\\popmart.txt`]: POPMART });
+    await openGroup("popmart");
+    expect(screen.queryByRole("group", { name: "Proxy filter" })).toBeNull();
+    fireEvent.click(card(WITH));
+    expect(card(WITH).getAttribute("aria-pressed")).toBe("true");
+    expect(emails()).toEqual(["b.two@gmail.com", "c.three@yahoo.com"]);
+    // The other proxy card replaces it.
+    fireEvent.click(card(WITHOUT));
+    expect(card(WITH).getAttribute("aria-pressed")).toBe("false");
+    expect(emails()).toEqual(["a.one@gmail.com"]);
+    // Clicking again turns it off.
+    fireEvent.click(card(WITHOUT));
+    expect(card(WITHOUT).getAttribute("aria-pressed")).toBe("false");
+    expect(emails()).toHaveLength(3);
+  });
+
+  it("filters by email domain, several at once, combined with the proxy filter and search", async () => {
+    backend({ [`${ACC}\\popmart.txt`]: `${POPMART}d@outlook.com:p\r\nnoat:p\r\n` });
+    await openGroup("popmart");
+    fireEvent.click(domain("gmail.com"));
+    expect(emails()).toEqual(["a.one@gmail.com", "b.two@gmail.com"]);
+    fireEvent.click(domain("outlook.com"));
+    expect(emails()).toEqual(["a.one@gmail.com", "b.two@gmail.com", "d@outlook.com"]);
+    fireEvent.click(card(WITH));
+    expect(emails()).toEqual(["b.two@gmail.com"]);
+    fireEvent.change(screen.getByLabelText("Search accounts"), { target: { value: "a.one" } });
+    expect(screen.getByText("No accounts match.")).toBeTruthy();
     fireEvent.change(screen.getByLabelText("Search accounts"), { target: { value: "" } });
-    fireEvent.click(screen.getByRole("button", { name: "Without proxy" }));
-    expect(accountRows().map((r) => r[1])).toEqual(["a.one@gmail.com"]);
+    fireEvent.click(domain("gmail.com"));
+    fireEvent.click(domain("outlook.com"));
+    expect(emails()).toEqual(["b.two@gmail.com", "c.three@yahoo.com"]);
+    fireEvent.click(card(WITH));
+    // Emails without an @ get their own entry.
+    fireEvent.click(domain("\\(no domain\\)"));
+    expect(emails()).toEqual(["noat"]);
+  });
+
+  it("clears every filter at once", async () => {
+    backend({ [`${ACC}\\popmart.txt`]: POPMART });
+    await openGroup("popmart");
+    expect(screen.queryByRole("button", { name: "Clear filters" })).toBeNull();
+    fireEvent.click(card(WITH));
+    fireEvent.click(domain("gmail.com"));
+    expect(emails()).toEqual(["b.two@gmail.com"]);
+    fireEvent.click(screen.getByRole("button", { name: "Clear filters" }));
+    expect(emails()).toHaveLength(3);
+    expect(domain("gmail.com").getAttribute("aria-pressed")).toBe("false");
+    expect(screen.queryByRole("button", { name: "Clear filters" })).toBeNull();
+  });
+
+  it("shows the top 6 domains, and all of them on request", async () => {
+    // Domains a.com to h.com with 9 down to 2 accounts.
+    const text = ["a", "b", "c", "d", "e", "f", "g", "h"]
+      .flatMap((d, i) => Array.from({ length: 9 - i }, (_, k) => `u${k}@${d}.com:p\r\n`))
+      .join("");
+    backend({ [`${ACC}\\g.txt`]: text });
+    await openGroup("g");
+    const listed = () =>
+      within(screen.getByRole("list", { name: "Email domains" }))
+        .getAllByRole("button")
+        .map((b) => b.textContent);
+    expect(listed()).toEqual(["a.com9", "b.com8", "c.com7", "d.com6", "e.com5", "f.com4", "+2 more domains"]);
+    fireEvent.click(screen.getByRole("button", { name: "+2 more domains" }));
+    fireEvent.click(domain("h.com"));
+    fireEvent.click(screen.getByRole("button", { name: "Show fewer" }));
+    // A selected domain stays listed so it can be turned off.
+    expect(listed()).toEqual(["a.com9", "b.com8", "c.com7", "d.com6", "e.com5", "f.com4", "h.com2", "+1 more domain"]);
+    expect(emails()).toHaveLength(2);
   });
 
   it("goes back to the overview", async () => {
