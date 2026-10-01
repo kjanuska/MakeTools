@@ -1,8 +1,9 @@
 // One account group: its accounts as a table, with counts, search and import.
 // Importing appends lines through save_text and restoring goes through
 // restore_backup; both back up the current file first. Nothing else is written.
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useDeferredValue, useEffect, useState } from "react";
 import { accountsOf, appendLines, hasProxy, oddLines, parseAccounts, planImport, type AccountsDoc } from "../../lib/formats/accounts";
+import { LoadingPanel } from "../../components/LoadingPanel";
 import { BackupsMenu } from "../../components/table/BackupsMenu";
 import { confirmAction } from "../../lib/dialogs";
 import { formatDateTime } from "../../lib/format";
@@ -27,7 +28,9 @@ const TOP_DOMAINS = 6;
 const domainLabel = (d: string) => d || "(no domain)";
 
 export function AccountFileView({ file, onBack, onChanged }: Props) {
-  const [doc, setDoc] = useState<AccountsDoc | null>(null);
+  const [loadedDoc, setDoc] = useState<AccountsDoc | null>(null);
+  // Drawn in a background render, so a big group opens at once with a spinner.
+  const doc = useDeferredValue(loadedDoc);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [importing, setImporting] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -143,7 +146,7 @@ export function AccountFileView({ file, onBack, onChanged }: Props) {
       </div>
     );
   }
-  if (!doc) return <p className="muted">Loading…</p>;
+  if (!doc) return <LoadingPanel name={displayName(file.name)} />;
 
   const stats = accountStats(doc);
   const q = query.trim().toLowerCase();

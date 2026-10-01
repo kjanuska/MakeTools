@@ -8,6 +8,7 @@
 // shuffle, discard, a backup, leaving the editor, Save all, closing).
 import { displayName } from "../../lib/table/fileNames";
 import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
+import { LoadingPanel } from "../../components/LoadingPanel";
 import { BackupsMenu } from "../../components/table/BackupsMenu";
 import { useFileActions } from "../../components/table/useFileActions";
 import {
@@ -104,18 +105,7 @@ export function ProxyFileView({ file, store, confirmOverwrite, onSaved }: Props)
   if (!entry || draft === null) {
     handlersRef.current = {};
     const loadError = store.loadError(file.path);
-    return (
-      <div className="file-panel">
-        <h2>{displayName(file.name)}</h2>
-        {loadError ? (
-          <p className="error">Couldn't read file: {loadError}</p>
-        ) : (
-          <p className="loading">
-            <span className="spinner" aria-hidden="true" /> Loading {displayName(file.name)}…
-          </p>
-        )}
-      </div>
-    );
+    return <LoadingPanel name={displayName(file.name)} error={loadError} />;
   }
 
   // Typed text the store doesn't have yet counts as a change if it differs from the saved file.

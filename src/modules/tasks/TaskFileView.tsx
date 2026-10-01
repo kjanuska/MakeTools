@@ -2,6 +2,7 @@
 // the builder that regenerates it, or the raw rows in the shared table editor.
 import { displayName } from "../../lib/table/fileNames";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { LoadingPanel, useFirstPaintDone } from "../../components/LoadingPanel";
 import { BackupsMenu } from "../../components/table/BackupsMenu";
 import { TableEditor } from "../../components/table/TableEditor";
 import type { TableUI } from "../../components/table/types";
@@ -90,6 +91,8 @@ export function TaskFileView(props: Props) {
   );
   const handlersRef = useRef<Partial<Record<ActionId, () => void>>>({});
   useShortcutsRef(handlersRef);
+  // The counts and builder are worked out and drawn after a first paint, so a big file opens at once with a spinner.
+  const painted = useFirstPaintDone();
 
   useEffect(() => {
     void store.load(file);
@@ -97,7 +100,8 @@ export function TaskFileView(props: Props) {
 
   const entry = store.get(file.path);
   const ctx = store.getContext();
-  const records = useMemo(() => entry?.doc.rows.filter(isRecord).map((r) => r.values) ?? [], [entry?.doc]);
+  const doc = painted ? entry?.doc : undefined;
+  const records = useMemo(() => doc?.rows.filter(isRecord).map((r) => r.values) ?? [], [doc]);
   const summary = useMemo(() => breakdown(records, ctx), [records, ctx]);
   const plan = useMemo(() => {
     const applied = appliedPlans.get(file.path);
@@ -125,15 +129,9 @@ export function TaskFileView(props: Props) {
     );
   }
 
-  if (!entry) {
+  if (!entry || !painted) {
     handlersRef.current = { back: onBack };
-    const loadError = store.loadError(file.path);
-    return (
-      <div className="file-panel">
-        <h2>{displayName(file.name)}</h2>
-        {loadError && <p className="error">Couldn't read file: {loadError}</p>}
-      </div>
-    );
+    return <LoadingPanel name={displayName(file.name)} error={store.loadError(file.path)} />;
   }
 
   const { dirty, errorCount } = entry;

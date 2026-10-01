@@ -17,6 +17,7 @@ import {
   type ImportResult,
 } from "../../lib/table/ops";
 import { useStoreVersion, type ConfirmOverwrite, type TableStore } from "../../lib/table/store";
+import { LoadingPanel, useFirstPaintDone } from "../LoadingPanel";
 import { BackupsMenu } from "./BackupsMenu";
 import { useFileActions } from "./useFileActions";
 import { Cell } from "./cells";
@@ -80,6 +81,8 @@ export function TableEditor<Ctx>({ file, store, ui, confirmOverwrite, onSaved, f
   const focusRow = useRef<number | null>(null);
   const shortcutHandlers = useRef<Partial<Record<ActionId, () => void>>>({});
   useShortcutsRef(shortcutHandlers);
+  // The grid is drawn after a first paint, so a big file opens at once with a spinner.
+  const painted = useFirstPaintDone();
 
   const entry = store.get(file.path);
   const loadError = store.loadError(file.path);
@@ -104,7 +107,7 @@ export function TableEditor<Ctx>({ file, store, ui, confirmOverwrite, onSaved, f
 
   // Jump to the row picked in the overview search, once.
   useEffect(() => {
-    if (!doc || highlightId === undefined || highlighted.current) return;
+    if (!doc || !painted || highlightId === undefined || highlighted.current) return;
     highlighted.current = true;
     const i = doc.rows.findIndex((r) => r.id === highlightId);
     if (i < 0) return;
@@ -112,7 +115,7 @@ export function TableEditor<Ctx>({ file, store, ui, confirmOverwrite, onSaved, f
     const input = gridRef.current?.querySelector<HTMLElement>(`[data-row="${i}"][data-col="0"]`);
     input?.scrollIntoView?.({ block: "center" });
     input?.focus();
-  }, [doc, highlightId]);
+  }, [doc, painted, highlightId]);
 
   useEffect(() => {
     if (focusRow.current === null) return;
@@ -204,14 +207,9 @@ export function TableEditor<Ctx>({ file, store, ui, confirmOverwrite, onSaved, f
     }
   }, []);
 
-  if (!entry || !doc) {
+  if (!entry || !doc || !painted) {
     shortcutHandlers.current = { back: onBack };
-    return (
-      <div className="file-panel">
-        <h2>{displayName(file.name)}</h2>
-        {loadError && <p className="error">Couldn't read file: {loadError}</p>}
-      </div>
-    );
+    return <LoadingPanel name={displayName(file.name)} error={loadError} />;
   }
 
   const { dirty, errors, errorCount, loaded } = entry;

@@ -173,7 +173,7 @@ describe("creating groups", () => {
     await screen.findByRole("heading", { name: "40" });
     expect(callsOf("create_file")).toEqual([{ path: p("40.csv"), text: `${H}\r\n` }]);
     expect(disk.get(p("40.csv"))).toBe(`${H}\r\n`);
-    expect(screen.getByText("This group is empty.")).toBeTruthy();
+    expect(await screen.findByText("This group is empty.")).toBeTruthy();
     await screen.findByRole("button", { name: fileItem("40") });
   });
 
