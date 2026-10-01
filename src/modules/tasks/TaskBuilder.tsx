@@ -527,6 +527,14 @@ export function TaskBuilder({ initial, actionsSlot, ctx, ui, before, onApply, on
   return (
     <div className="task-layout">
       <div className="task-builder">
+        {/* At the top, just under the "N problems to fix" link in the header. */}
+        {errors.length > 0 && (
+          <ul className="error builder-errors" aria-label="Problems" ref={problemsRef}>
+            {errors.map((e, i) => (
+              <li key={i}>{e}</li>
+            ))}
+          </ul>
+        )}
         <section>
           <h3>
             <span className="step">1</span> Profiles
@@ -608,13 +616,6 @@ export function TaskBuilder({ initial, actionsSlot, ctx, ui, before, onApply, on
         </section>
 
         {actionsSlot ? createPortal(actions, actionsSlot) : <div className="toolbar builder-actions">{actions}</div>}
-        {errors.length > 0 && (
-          <ul className="error builder-errors" aria-label="Problems" ref={problemsRef}>
-            {errors.map((e, i) => (
-              <li key={i}>{e}</li>
-            ))}
-          </ul>
-        )}
       </div>
 
       {editing && plan.inputs[editing.k] && (

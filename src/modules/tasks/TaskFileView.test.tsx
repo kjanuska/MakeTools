@@ -520,5 +520,11 @@ describe("task file header", () => {
     fireEvent.click(link);
     expect(scrolled).toHaveBeenCalled();
     expect(document.querySelector(".task-head")!.contains(list)).toBe(false);
+    // First thing in the builder, above the profile groups, not at the bottom.
+    const builder = document.querySelector(".task-builder")!;
+    expect(builder.firstElementChild).toBe(list);
+    expect(list.compareDocumentPosition(screen.getByRole("button", { name: "Apply to file" }))).toBe(
+      Node.DOCUMENT_POSITION_PRECEDING,
+    );
   });
 });
