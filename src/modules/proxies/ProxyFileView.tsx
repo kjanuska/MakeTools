@@ -1,6 +1,12 @@
 // A proxy file: its proxies in an editable, numbered text box, the count,
 // warnings for odd lines, and Shuffle. Edits stay unsaved until Save.
-import { useEffect, useMemo, useRef, useState } from "react";
+//
+// Kept fast for big files (10,000+ lines): typing only updates the text box;
+// the count and odd lines are worked out in the background (with a spinner
+// while they catch up), and the typed text is passed to the store after a
+// pause in typing, or straight away before anything that needs it (save,
+// shuffle, discard, a backup, leaving the editor, Save all, closing).
+import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
 import { BackupsMenu } from "../../components/table/BackupsMenu";
 import { useFileActions } from "../../components/table/useFileActions";
 import {
@@ -30,16 +36,14 @@ const proxies = (n: number) => plural(n, "proxy", "proxies");
 const LINE_HEIGHT = 20;
 /** How many odd lines are listed. */
 const ODD_SHOWN = 100;
+/** Pause in typing before the text is passed to the store. */
+export const PENDING_MS = 300;
 
 export function ProxyFileView({ file, store, confirmOverwrite, onSaved }: Props) {
   useStoreVersion(store);
   const [backupsOpen, setBackupsOpen] = useState(false);
-  const { error, status, setStatus, saving, save, discard, restore } = useFileActions(
-    store,
-    file,
-    confirmOverwrite,
-    onSaved,
-  );
+  const actions = useFileActions(store, file, confirmOverwrite, onSaved);
+  const { error, status, setStatus, saving } = actions;
   const handlersRef = useRef<Partial<Record<ActionId, () => void>>>({});
   useShortcutsRef(handlersRef);
   const editorRef = useRef<HTMLTextAreaElement>(null);
@@ -50,54 +54,115 @@ export function ProxyFileView({ file, store, confirmOverwrite, onSaved }: Props)
   }, [store, file]);
 
   const entry = store.get(file.path);
-  const text = entry?.text ?? "";
-  const editorText = useMemo(() => toEditorText(text), [text]);
-  const parsed = useMemo(() => parseProxies(text), [text]);
+  const storeText = useMemo(() => (entry ? toEditorText(entry.text) : null), [entry?.text]);
+  const savedText = useMemo(() => (entry ? toEditorText(entry.loaded.text) : null), [entry?.loaded.text]);
+
+  // What the text box shows. It runs ahead of the store while typing.
+  const [draft, setDraft] = useState<string | null>(null);
+  // The store's text as last seen or set here. Anything else means the store
+  // was changed elsewhere (load, shuffle, discard, a backup), so the box shows that.
+  const synced = useRef<string | null>(null);
+  if (storeText !== null && storeText !== synced.current) {
+    synced.current = storeText;
+    setDraft(storeText);
+  }
+
+  // Typed text not yet in the store.
+  const pending = useRef<string | null>(null);
+  const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const flush = useCallback(() => {
+    clearTimeout(timer.current);
+    const value = pending.current;
+    pending.current = null;
+    const e = store.get(file.path);
+    if (value === null || !e) return;
+    synced.current = value;
+    // In the style of the file on disk, so typing it back to what's saved is no change.
+    store.update(file.path, () => fromEditorText(value, e.loaded.text));
+  }, [store, file.path]);
+
+  useEffect(() => {
+    const unregister = store.registerPending(flush);
+    return () => {
+      flush();
+      unregister();
+    };
+  }, [store, flush]);
+
+  const text = draft ?? "";
+  // The count and odd lines lag behind typing (and the first render) instead of slowing it.
+  const deferred = useDeferredValue(text, "");
+  const computing = deferred !== text;
+  const parsed = useMemo(() => parseProxies(deferred), [deferred]);
   const count = useMemo(() => countProxies(parsed), [parsed]);
   const odd = useMemo(() => oddLines(parsed.lines), [parsed]);
   // One number per editor line, including the empty line after a final line ending.
-  const editorLines = useMemo(() => editorText.split("\n").length, [editorText]);
+  const editorLines = useMemo(() => text.split("\n").length, [text]);
   const gutter = useMemo(() => Array.from({ length: editorLines }, (_, i) => i + 1).join("\n"), [editorLines]);
 
-  if (!entry) {
+  if (!entry || draft === null) {
     handlersRef.current = {};
     const loadError = store.loadError(file.path);
     return (
       <div className="file-panel">
         <h2>{file.name}</h2>
-        {loadError && <p className="error">Couldn't read file: {loadError}</p>}
+        {loadError ? (
+          <p className="error">Couldn't read file: {loadError}</p>
+        ) : (
+          <p className="loading">
+            <span className="spinner" aria-hidden="true" /> Loading {file.name}…
+          </p>
+        )}
       </div>
     );
   }
 
-  const { dirty } = entry;
+  // Typed text the store doesn't have yet counts as a change if it differs from the saved file.
+  const dirty = draft !== storeText ? draft !== savedText : entry.dirty;
   const canSave = dirty && !saving;
-  handlersRef.current = {
-    backups: () => setBackupsOpen((o) => !o),
-    save: () => canSave && void save(),
-    discard: () => dirty && void discard(),
-  };
 
-  async function restoreBackup(b: BackupEntry) {
-    if (await restore(b)) setBackupsOpen(false);
+  function save() {
+    flush();
+    void actions.save();
   }
 
+  function discard() {
+    flush();
+    void actions.discard();
+  }
+
+  async function restoreBackup(b: BackupEntry) {
+    flush();
+    if (await actions.restore(b)) setBackupsOpen(false);
+  }
+
+  handlersRef.current = {
+    backups: () => setBackupsOpen((o) => !o),
+    save: () => canSave && save(),
+    discard: () => dirty && discard(),
+  };
+
   function edit(value: string) {
-    // In the style of the file on disk, so typing it back to what's saved is no change.
-    store.update(file.path, () => fromEditorText(value, entry!.loaded.text));
+    setDraft(value);
+    pending.current = value;
+    clearTimeout(timer.current);
+    timer.current = setTimeout(flush, PENDING_MS);
     if (status) setStatus(null);
   }
 
   function shuffle() {
+    flush();
     store.update(file.path, (t) => shuffleProxies(t));
-    setStatus(`Shuffled ${proxies(count)}. Save to write the file.`);
+    const n = countProxies(parseProxies(store.get(file.path)!.text));
+    setStatus(`Shuffled ${proxies(n)}. Save to write the file.`);
   }
 
   /** Selects a line in the editor and scrolls to it. */
   function goToLine(line: number) {
     const el = editorRef.current;
     if (!el) return;
-    const lines = editorText.split("\n");
+    const lines = text.split("\n");
+    if (line > lines.length) return;
     const start = lines.slice(0, line - 1).reduce((n, l) => n + l.length + 1, 0);
     el.focus();
     el.setSelectionRange(start, start + lines[line - 1].length);
@@ -130,12 +195,13 @@ export function ProxyFileView({ file, store, confirmOverwrite, onSaved }: Props)
           Discard changes
         </button>
         <span className="toolbar-sep" />
-        <button disabled={count < 2} onClick={shuffle} title="Put every line in a random order">
+        <button disabled={count < 2 && !computing} onClick={shuffle} title="Put every line in a random order">
           Shuffle
         </button>
       </div>
-      <p className="editor-status" role="status">
+      <p className="editor-status" role="status" aria-busy={computing || undefined}>
         <strong className="proxy-count">{proxies(count)}</strong>
+        {computing && <span className="spinner small" title="Counting…" aria-hidden="true" />}
         {odd.length > 0 && <span className="warn"> · {plural(odd.length, "odd line", "odd lines")}</span>}
         {dirty && <span className="unsaved"> · Unsaved changes</span>}
         {status && <span className="status"> · {status}</span>}
@@ -149,8 +215,9 @@ export function ProxyFileView({ file, store, confirmOverwrite, onSaved }: Props)
           <textarea
             ref={editorRef}
             aria-label="Proxy list"
-            value={editorText}
+            value={text}
             onChange={(e) => edit(e.target.value)}
+            onBlur={flush}
             onScroll={syncGutter}
             wrap="off"
             spellCheck={false}

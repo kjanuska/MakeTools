@@ -211,6 +211,7 @@ export default function App() {
 
   /** Saves every changed file without errors. True if nothing is left unsaved. */
   async function saveAll(): Promise<{ ok: boolean; summary: string }> {
+    proxyStore.flushPending();
     setSavingAll(true);
     setChangesMessage(null);
     const results = [
@@ -237,6 +238,7 @@ export default function App() {
    * Discard or Cancel. True if it's fine to go ahead.
    */
   async function resolveUnsaved(action: string): Promise<boolean> {
+    proxyStore.flushPending();
     const dirty = allDirty();
     if (dirty.length === 0) return true;
     const list = dirty.map((e) => `  ${e.file.name}`).join("\n");

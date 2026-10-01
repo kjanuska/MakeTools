@@ -2,6 +2,7 @@ import { mockIPC } from "@tauri-apps/api/mocks";
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import App from "../../App";
+import { PENDING_MS } from "./ProxyFileView";
 import { askSaveDiscardCancel, confirmAction } from "../../lib/dialogs";
 import { parseProxies } from "../../lib/formats/proxies";
 import type { FileEntry } from "../../lib/fs";
@@ -32,6 +33,8 @@ const C = "res.example.org:9000:u2:p2";
 
 let disk: Map<string, string>;
 let saves: { path: string; text: string }[];
+/** While set, reads of proxy files wait for it (to see the loading state). */
+let readGate: Promise<void> | null = null;
 
 function backend(files: Record<string, string>, backups: Record<string, string> = {}) {
   disk = new Map(Object.entries(files).map(([n, t]) => [P(n), t]));
@@ -44,8 +47,10 @@ function backend(files: Record<string, string>, backups: Record<string, string> 
           .filter((p) => p.startsWith(args.dir + "\\") && p.endsWith("." + args.extension))
           .sort()
           .map((path): FileEntry => ({ name: path.slice(args.dir.length + 1), path, size: disk.get(path)!.length, modifiedMs: 1 }));
-      case "read_text":
-        return { text: disk.get(args.path)!, lineEnding: "crlf", hasBom: false };
+      case "read_text": {
+        const result = () => ({ text: disk.get(args.path)!, lineEnding: "crlf", hasBom: false });
+        return readGate && args.path.startsWith(P("")) ? readGate.then(result) : result();
+      }
       case "save_text":
         saves.push({ path: args.path, text: args.text });
         disk.set(args.path, args.text);
@@ -65,6 +70,7 @@ beforeEach(() => {
   vi.mocked(guardWindowClose).mockResolvedValue(() => {});
   vi.mocked(confirmAction).mockResolvedValue(true);
   vi.mocked(getSites).mockResolvedValue([]);
+  readGate = null;
 });
 
 const btn = (name: string) => screen.getByRole("button", { name }) as HTMLButtonElement;
@@ -80,6 +86,12 @@ async function open(name: string) {
   fireEvent.click(await screen.findByRole("button", { name: new RegExp(`^${name.replace(".", "\\.")}`) }));
   await screen.findByRole("heading", { name });
   await screen.findByRole("textbox", { name: "Proxy list" });
+  await settled();
+}
+
+/** Waits until the count and odd lines have caught up with the text. */
+async function settled() {
+  await waitFor(() => expect(screen.getByRole("status").getAttribute("aria-busy")).toBeNull());
 }
 
 async function saved(): Promise<string> {
@@ -316,10 +328,116 @@ describe("saving with the rest of the app", () => {
     fireEvent.click(btn("Backups ▾"));
     fireEvent.click(await screen.findByRole("button", { name: "Restore" }));
     await waitFor(() => expect(status()).toContain("Unsaved changes"));
+    await settled();
     expect(status()).toContain("2 proxies");
     expect(saves).toEqual([]);
     fireEvent.click(btn("Save"));
     await waitFor(() => expect(saves.length).toBe(1));
     expect(saves[0].text).toBe(`${B}\r\n${C}\r\n`);
+  });
+});
+
+describe("big files stay responsive", () => {
+  const changes = () => screen.getByRole("region", { name: "Unsaved changes" });
+  const listed = () => within(changes()).queryByRole("button", { name: "M proxy/p.txt" });
+
+  it("shows a spinner while the file is being read", async () => {
+    let release!: () => void;
+    readGate = new Promise((r) => (release = r));
+    backend({ "p.txt": `${A}\r\n${B}` });
+    render(<App />);
+    fireEvent.click(await screen.findByRole("button", { name: "Proxies" }));
+    fireEvent.click(await screen.findByRole("button", { name: /^p\.txt/ }));
+    expect(await screen.findByText("Loading p.txt…")).toBeTruthy();
+    expect(document.querySelector(".loading .spinner")).toBeTruthy();
+    expect(screen.queryByRole("textbox", { name: "Proxy list" })).toBeNull();
+    release();
+    expect(await screen.findByRole("textbox", { name: "Proxy list" })).toBeTruthy();
+    expect(screen.queryByText("Loading p.txt…")).toBeNull();
+    await settled();
+    expect(status()).toContain("2 proxies");
+  });
+
+  it("the count catches up with typing (busy, then the new count)", async () => {
+    backend({ "p.txt": A });
+    await open("p.txt");
+    type(`${A}\n${B}\n${C}`);
+    await settled();
+    expect(status()).toContain("3 proxies");
+    expect(document.querySelector(".editor-status .spinner")).toBeNull();
+  });
+
+  it("typing shows as unsaved at once but reaches the store after a pause", async () => {
+    backend({ "p.txt": A });
+    await open("p.txt");
+    type(`${A}\n${B}`);
+    expect(status()).toContain("Unsaved changes");
+    expect(listed()).toBeNull();
+    await waitFor(() => expect(listed()).toBeTruthy(), { timeout: PENDING_MS + 1000 });
+  });
+
+  it("leaving the editor passes the text on straight away", async () => {
+    backend({ "p.txt": A });
+    await open("p.txt");
+    type(`${A}\n${B}`);
+    fireEvent.blur(editor());
+    expect(listed()).toBeTruthy();
+  });
+
+  it("Save all right after typing saves what was typed", async () => {
+    backend({ "p.txt": A });
+    await open("p.txt");
+    // Show the Save all button (it appears once something is unsaved).
+    type(`${A}\nx:1`);
+    fireEvent.blur(editor());
+    type(`${A}\n${B}`);
+    fireEvent.click(within(changes()).getByRole("button", { name: "Save all" }));
+    await waitFor(() => expect(saves.length).toBe(1));
+    expect(saves[0].text).toBe(`${A}\r\n${B}`);
+  });
+
+  it("closing right after typing asks about the file", async () => {
+    backend({ "p.txt": A });
+    await open("p.txt");
+    type(`${A}\n${B}`);
+    vi.mocked(askSaveDiscardCancel).mockResolvedValue("cancel");
+    const calls = vi.mocked(guardWindowClose).mock.calls;
+    expect(await calls[calls.length - 1][0]()).toBe(false);
+    expect(vi.mocked(askSaveDiscardCancel).mock.calls[0][0]).toContain("p.txt");
+  });
+
+  it("switching files right after typing keeps what was typed", async () => {
+    backend({ "p.txt": A, "q.txt": C });
+    await open("p.txt");
+    type(`${A}\n${B}`);
+    fireEvent.click(screen.getByRole("button", { name: /^q\.txt/ }));
+    await screen.findByRole("heading", { name: "q.txt" });
+    expect(listed()).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: /^p\.txt/ }));
+    await screen.findByRole("heading", { name: "p.txt" });
+    expect(editor().value).toBe(`${A}\n${B}`);
+  });
+
+  it("Save and Discard right after typing use what was typed", async () => {
+    backend({ "p.txt": A });
+    await open("p.txt");
+    type(`${A}\n${B}`);
+    fireEvent.click(btn("Discard changes"));
+    await waitFor(() => expect(editor().value).toBe(A));
+    expect(status()).not.toContain("Unsaved");
+    type(`${A}\n${C}`);
+    expect(await saved()).toBe(`${A}\r\n${C}`);
+  });
+
+  it("a backup restored right after typing replaces what was typed", async () => {
+    backend({ "p.txt": A }, { b1: `${B}\r\n` });
+    await open("p.txt");
+    type(`${A}\nx:1`);
+    fireEvent.click(btn("Backups ▾"));
+    fireEvent.click(await screen.findByRole("button", { name: "Restore" }));
+    await waitFor(() => expect(editor().value).toBe(`${B}\n`));
+    // Typing again after the restore is kept.
+    type(`${B}\n${C}`);
+    expect(await saved()).toBe(`${B}\r\n${C}`);
   });
 });

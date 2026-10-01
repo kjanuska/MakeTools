@@ -42,6 +42,22 @@ export class ProxyStore {
     return { file, loaded, text, dirty: text !== loaded.text };
   }
 
+  private flushers = new Set<() => void>();
+
+  /**
+   * An open editor that holds typed text not yet passed to the store (it
+   * waits for a pause in typing). Returns the function that unregisters it.
+   */
+  registerPending(flush: () => void): () => void {
+    this.flushers.add(flush);
+    return () => this.flushers.delete(flush);
+  }
+
+  /** Passes any typed-but-pending text to the store. Call before saving or checking for unsaved changes. */
+  flushPending(): void {
+    for (const flush of this.flushers) flush();
+  }
+
   get(path: string): ProxyEntry | undefined {
     return this.entries.get(path);
   }

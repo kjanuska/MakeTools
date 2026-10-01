@@ -66,6 +66,11 @@ Right-clicking a proxy file in the file list (or using the menu key / Shift+F10)
   - `FileList` takes `menuFor` and `renaming` props, so other modules can use them.
   - The logic is shared by every module: `src/shell/useFileMenu.ts`, with per-module settings in `src/shell/fileMenus.ts`.
   - `copyName`, `copyTableFile` and `renameTableFile` take an optional extension.
+- Speed for big files (2026-09-30, the user found 10,000-line files laggy):
+  - Measured per keystroke on `hero.txt`: editor → file text 5 ms, odd lines 5 ms, parse 2 ms, plus a store update that re-rendered the whole app.
+  - Now a spinner shows while a file is read.
+  - Typing only updates the text box. The count and odd lines are worked out in the background with `useDeferredValue`, with a small spinner and `aria-busy` while they catch up.
+  - The typed text reaches the store after 300 ms without typing (`PENDING_MS`). It's passed straight away before Save, Discard, Shuffle, a backup restore, leaving the editor and switching files, and before Save all and the close prompt (`ProxyStore.flushPending`). Nothing typed can be left out of a save.
 - The editor is a plain `<textarea>` (no wrapping) with a line-number gutter that scrolls with it, so it copes with the 10,000-line files.
 
 ## Open questions
