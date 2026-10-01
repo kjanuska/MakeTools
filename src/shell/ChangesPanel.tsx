@@ -1,3 +1,5 @@
+import { displayName } from "../lib/table/fileNames";
+
 export interface ChangedFile {
   path: string;
   name: string;
@@ -31,7 +33,7 @@ export function ChangesPanel({ files, onOpen, onSaveAll, busy, message }: Props)
                   title={f.invalid ? `${f.path} (has errors)` : f.path}
                   onClick={() => onOpen(f.path)}
                 >
-                  <span className="change-mark">M</span> {f.folder}/{f.name}
+                  <span className="change-mark">M</span> {f.folder}/{displayName(f.name)}
                 </button>
               </li>
             ))}

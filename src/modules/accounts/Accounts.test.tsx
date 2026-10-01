@@ -82,7 +82,7 @@ async function openGroup(name: string) {
   render(<App />);
   await screen.findByRole("heading", { name: "Account groups" });
   fireEvent.click(await within(groupsTable()).findByRole("button", { name }));
-  await screen.findByRole("heading", { name: `${name}.txt` });
+  await screen.findByRole("heading", { name });
 }
 
 function paste(text: string) {
@@ -125,7 +125,7 @@ describe("account groups overview", () => {
 
     fireEvent.change(screen.getByPlaceholderText("Name"), { target: { value: "nike" } });
     fireEvent.click(screen.getByRole("button", { name: "Create" }));
-    expect(await screen.findByRole("heading", { name: "nike.txt" })).toBeTruthy();
+    expect(await screen.findByRole("heading", { name: "nike" })).toBeTruthy();
     expect(disk.get(`${ACC}\\nike.txt`)).toBe("");
     expect(await screen.findByText(/No accounts in this group yet/)).toBeTruthy();
   });

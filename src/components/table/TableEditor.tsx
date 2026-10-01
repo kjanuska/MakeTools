@@ -1,3 +1,4 @@
+import { displayName } from "../../lib/table/fileNames";
 import { memo, useCallback, useEffect, useRef, useState, type KeyboardEvent, type MouseEvent } from "react";
 import { LINE_ENDING_LABELS } from "../../lib/format";
 import { headerOf, type DataRow, type Row } from "../../lib/formats/csvTable";
@@ -207,7 +208,7 @@ export function TableEditor<Ctx>({ file, store, ui, confirmOverwrite, onSaved, f
     shortcutHandlers.current = { back: onBack };
     return (
       <div className="file-panel">
-        <h2>{file.name}</h2>
+        <h2>{displayName(file.name)}</h2>
         {loadError && <p className="error">Couldn't read file: {loadError}</p>}
       </div>
     );
@@ -270,7 +271,7 @@ export function TableEditor<Ctx>({ file, store, ui, confirmOverwrite, onSaved, f
     <div className="table-editor" ref={rootRef}>
       <div className="editor-head">
         <button onClick={onBack}>← All {filesLabel}</button>
-        <h2>{file.name}</h2>
+        <h2>{displayName(file.name)}</h2>
         <span className="muted">
           {ui.summary(records, ctx)}
           {rawCount > 0 && ` · ${rawCount} unparseable ${rawCount === 1 ? "line" : "lines"} (kept unchanged)`}
@@ -385,7 +386,7 @@ export function TableEditor<Ctx>({ file, store, ui, confirmOverwrite, onSaved, f
                 const r = store.transfer(file.path, target.path, selectedIds, mode);
                 if (!r.ok) return r.error;
                 setStatus(
-                  `${mode === "copy" ? "Copied" : "Moved"} ${r.count} ${r.count === 1 ? item : items} to ${target.name} (not saved yet).`,
+                  `${mode === "copy" ? "Copied" : "Moved"} ${r.count} ${r.count === 1 ? item : items} to ${displayName(target.name)} (not saved yet).`,
                 );
                 return null;
               }}
@@ -794,7 +795,7 @@ function TransferPanel({
           <option value="">Choose…</option>
           {targets.map((g) => (
             <option key={g.path} value={g.path}>
-              {g.name}
+              {displayName(g.name)}
             </option>
           ))}
         </select>

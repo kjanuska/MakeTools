@@ -8,7 +8,7 @@ import { confirmAction } from "../../lib/dialogs";
 import { formatDateTime } from "../../lib/format";
 import { readText, restoreBackup, saveText, type BackupEntry, type FileEntry } from "../../lib/fs";
 import { useShortcuts } from "../../lib/shortcuts";
-import { groupNameOf } from "../../lib/table/fileNames";
+import { displayName, groupNameOf } from "../../lib/table/fileNames";
 import { ImportPanel } from "./ImportPanel";
 import { accountStats, domainOf, plural } from "./stats";
 import "./accounts.css";
@@ -96,7 +96,7 @@ export function AccountFileView({ file, onBack, onChanged }: Props) {
   async function restore(b: BackupEntry) {
     const when = formatDateTime(b.createdMs);
     const ok = await confirmAction(
-      `Replace ${file.name} with the backup from ${when}?\n\nThe current version is backed up first, so this can be undone.`,
+      `Replace ${displayName(file.name)} with the backup from ${when}?\n\nThe current version is backed up first, so this can be undone.`,
       "Restore backup",
     );
     if (!ok) return;
@@ -120,7 +120,7 @@ export function AccountFileView({ file, onBack, onChanged }: Props) {
   const head = (
     <div className="editor-head">
       <button onClick={onBack}>← All account groups</button>
-      <h2>{file.name}</h2>
+      <h2>{displayName(file.name)}</h2>
       <span className="spacer" />
       <BackupsMenu
         file={file}

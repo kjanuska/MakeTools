@@ -1,3 +1,4 @@
+import { fileItem } from "../../test/fileList";
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { mockIPC } from "@tauri-apps/api/mocks";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -136,11 +137,11 @@ describe("groups overview", () => {
     backend(FILES);
     await openOverview();
     fireEvent.click(within(groupRow("25")).getByRole("button", { name: "25" }));
-    await screen.findByRole("heading", { name: "25.csv" });
+    await screen.findByRole("heading", { name: "25" });
     fireEvent.click(btn("← All groups"));
     await screen.findByRole("heading", { name: "Profile groups" });
-    fireEvent.click(screen.getByRole("button", { name: /^25\.csv/ }));
-    await screen.findByRole("heading", { name: "25.csv" });
+    fireEvent.click(screen.getByRole("button", { name: fileItem("25") }));
+    await screen.findByRole("heading", { name: "25" });
     fireEvent.click(btn("Profiles"));
     await screen.findByRole("heading", { name: "Profile groups" });
   });
@@ -169,11 +170,11 @@ describe("creating groups", () => {
     await openOverview();
     fireEvent.change(screen.getByRole("textbox", { name: /New group/ }), { target: { value: "40" } });
     fireEvent.click(btn("Create"));
-    await screen.findByRole("heading", { name: "40.csv" });
+    await screen.findByRole("heading", { name: "40" });
     expect(callsOf("create_file")).toEqual([{ path: p("40.csv"), text: `${H}\r\n` }]);
     expect(disk.get(p("40.csv"))).toBe(`${H}\r\n`);
     expect(screen.getByText("This group is empty.")).toBeTruthy();
-    await screen.findByRole("button", { name: /^40\.csv/ });
+    await screen.findByRole("button", { name: fileItem("40") });
   });
 
   it("validates the name before creating", async () => {
@@ -299,7 +300,7 @@ describe("finding profiles", () => {
     await openOverview();
     fireEvent.change(screen.getByLabelText("Find by profileName"), { target: { value: "12" } });
     fireEvent.click(within(screen.getByRole("table", { name: "Matches" })).getByRole("button", { name: "12" }));
-    await screen.findByRole("heading", { name: "5.csv" });
+    await screen.findByRole("heading", { name: "5" });
     await waitFor(() => expect(screen.getByRole("status").textContent).toContain("1 selected"));
     const selected = screen.getAllByRole("row").filter((r) => r.getAttribute("aria-selected") === "true");
     expect(selected.map((r) => within(r).getByRole("rowheader").textContent)).toEqual(["2"]);
@@ -310,7 +311,7 @@ describe("finding profiles", () => {
 describe("moving and copying profiles between groups", () => {
   async function openGroup(name: string) {
     fireEvent.click(within(groupRow(name)).getByRole("button", { name }));
-    await screen.findByRole("heading", { name: `${name}.csv` });
+    await screen.findByRole("heading", { name });
     await screen.findByLabelText("Row 1 profileName");
   }
 
@@ -329,7 +330,7 @@ describe("moving and copying profiles between groups", () => {
     fireEvent.click(screen.getByRole("rowheader", { name: "Row 2" }));
     fireEvent.click(screen.getByRole("rowheader", { name: "Row 3" }), { shiftKey: true });
     transfer("empty.csv", "Move");
-    expect(screen.getByRole("status").textContent).toContain("Moved 2 profiles to empty.csv (not saved yet).");
+    expect(screen.getByRole("status").textContent).toContain("Moved 2 profiles to empty (not saved yet).");
     expect(cell(1, "profileName").value).toBe("1");
     expect(screen.queryByLabelText("Row 2 profileName")).toBeNull();
 
@@ -346,9 +347,9 @@ describe("moving and copying profiles between groups", () => {
     await openGroup("25");
     fireEvent.click(screen.getByRole("rowheader", { name: "Row 3" }));
     transfer("empty.csv", "Copy");
-    expect(screen.getByRole("status").textContent).toContain("Copied 1 profile to empty.csv");
+    expect(screen.getByRole("status").textContent).toContain("Copied 1 profile to empty");
     const changes = within(screen.getByRole("region", { name: "Unsaved changes" }));
-    expect(changes.getAllByRole("button", { name: /profile\// }).map((b) => b.textContent)).toEqual(["M profile/empty.csv"]);
+    expect(changes.getAllByRole("button", { name: /profile\// }).map((b) => b.textContent)).toEqual(["M profile/empty"]);
   });
 
   it("refuses when a name already exists in the target", async () => {
@@ -357,7 +358,7 @@ describe("moving and copying profiles between groups", () => {
     await openGroup("25");
     fireEvent.click(screen.getByRole("rowheader", { name: "Row 1" }));
     const panel = transfer("5.csv", "Move");
-    expect(within(panel).getByText("5.csv already has profiles named: 1. Rename them first.")).toBeTruthy();
+    expect(within(panel).getByText("5 already has profiles named: 1. Rename them first.")).toBeTruthy();
     expect(cell(1, "profileName").value).toBe("1");
     expect(within(screen.getByRole("region", { name: "Unsaved changes" })).getByText("None")).toBeTruthy();
   });
@@ -371,7 +372,7 @@ describe("moving and copying profiles between groups", () => {
     const options = within(panel)
       .getAllByRole("option")
       .map((o) => o.textContent);
-    expect(options).toEqual(["Choose…", "5.csv", "empty.csv"]);
+    expect(options).toEqual(["Choose…", "5", "empty"]);
     expect((within(panel).getByRole("button", { name: /^Copy/ }) as HTMLButtonElement).disabled).toBe(true);
   });
 });

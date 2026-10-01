@@ -1,3 +1,4 @@
+import { displayName } from "./lib/table/fileNames";
 import { useEffect, useMemo, useRef, useState } from "react";
 import "./App.css";
 import { ModuleIcon } from "./components/ModuleIcon";
@@ -175,7 +176,7 @@ export default function App() {
     setListVersion((v) => v + 1);
     const parts = [`Renamed ${from} to ${to}. Saved ${r.saved.length} ${r.saved.length === 1 ? "file" : "files"}.`];
     if (r.unsaved.length) {
-      parts.push(`Not saved yet: ${r.unsaved.map((u) => `${u.file} (${u.reason})`).join(", ")}.`);
+      parts.push(`Not saved yet: ${r.unsaved.map((u) => `${displayName(u.file)} (${u.reason})`).join(", ")}.`);
     }
     return parts.join(" ");
   }
@@ -234,9 +235,9 @@ export default function App() {
     setListVersion((v) => v + 1);
     const saved = results.reduce((n, r) => n + r.saved.length, 0);
     const problems = results.flatMap((r) => [
-      ...r.invalid.map((e) => `${e.file.name}: has errors, fix them first`),
-      ...r.failed.map((f) => `${f.entry.file.name}: ${f.error}`),
-      ...r.cancelled.map((e) => `${e.file.name}: not overwritten`),
+      ...r.invalid.map((e) => `${displayName(e.file.name)}: has errors, fix them first`),
+      ...r.failed.map((f) => `${displayName(f.entry.file.name)}: ${f.error}`),
+      ...r.cancelled.map((e) => `${displayName(e.file.name)}: not overwritten`),
     ]);
     const savedText = `Saved ${saved} ${saved === 1 ? "file" : "files"}.`;
     const summary = problems.length ? `${savedText} Not saved:\n${problems.join("\n")}` : savedText;
@@ -252,7 +253,7 @@ export default function App() {
     proxyStore.flushPending();
     const dirty = allDirty();
     if (dirty.length === 0) return true;
-    const list = dirty.map((e) => `  ${e.file.name}`).join("\n");
+    const list = dirty.map((e) => `  ${displayName(e.file.name)}`).join("\n");
     const choice = await askSaveDiscardCancel(
       `You have unsaved changes in ${dirty.length} ${dirty.length === 1 ? "file" : "files"}:\n\n${list}\n\nSave them before ${action}?`,
       "Unsaved changes",

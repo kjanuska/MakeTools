@@ -1,3 +1,4 @@
+import { displayName } from "../lib/table/fileNames";
 import { useState } from "react";
 import { ContextMenu, type MenuItem } from "../components/ContextMenu";
 import type { FileEntry } from "../lib/fs";
@@ -91,7 +92,7 @@ export function FileList(props: Props) {
                   onContextMenu={(e) => openMenu(e, f)}
                 >
                   <span>
-                    {f.name}
+                    {displayName(f.name)}
                     {m?.modified && <span className="modified-dot"> ●</span>}
                   </span>
                   {c && (
@@ -110,7 +111,7 @@ export function FileList(props: Props) {
         <ContextMenu
           x={menu.x}
           y={menu.y}
-          label={menu.file.name}
+          label={displayName(menu.file.name)}
           items={menuContent.items}
           note={menuContent.note}
           onClose={() => setMenu(null)}

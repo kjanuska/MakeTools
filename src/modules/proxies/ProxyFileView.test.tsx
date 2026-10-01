@@ -1,3 +1,4 @@
+import { fileItem } from "../../test/fileList";
 import { mockIPC } from "@tauri-apps/api/mocks";
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -83,8 +84,8 @@ const lines = (text: string) => parseProxies(text).lines;
 async function open(name: string) {
   render(<App />);
   fireEvent.click(await screen.findByRole("button", { name: "Proxies" }));
-  fireEvent.click(await screen.findByRole("button", { name: new RegExp(`^${name.replace(".", "\\.")}`) }));
-  await screen.findByRole("heading", { name });
+  fireEvent.click(await screen.findByRole("button", { name: fileItem(name) }));
+  await screen.findByRole("heading", { name: name.replace(/\.\w+$/, "") });
   await screen.findByRole("textbox", { name: "Proxy list" });
   await settled();
 }
@@ -256,7 +257,7 @@ describe("shuffle", () => {
     expect(after).not.toEqual([A, B, C]);
     expect([...after].sort()).toEqual([A, B, C].sort());
     const changes = screen.getByRole("region", { name: "Unsaved changes" });
-    expect(within(changes).getByRole("button", { name: "M proxy/p.txt" })).toBeTruthy();
+    expect(within(changes).getByRole("button", { name: "M proxy/p" })).toBeTruthy();
 
     const written = await saved();
     expect(lines(written)).toEqual(after);
@@ -305,7 +306,7 @@ describe("saving with the rest of the app", () => {
     const closeCalls = vi.mocked(guardWindowClose).mock.calls;
     const onClose = closeCalls[closeCalls.length - 1][0];
     expect(await onClose()).toBe(true);
-    expect(vi.mocked(askSaveDiscardCancel).mock.calls[0][0]).toContain("p.txt");
+    expect(vi.mocked(askSaveDiscardCancel).mock.calls[0][0]).toContain("\n  p\n");
     await waitFor(() => expect(status()).not.toContain("Unsaved"));
     expect(saves).toEqual([]);
   });
@@ -314,11 +315,11 @@ describe("saving with the rest of the app", () => {
     backend({ "p.txt": `${A}\r\n${B}`, "q.txt": C });
     await open("p.txt");
     fireEvent.click(btn("Shuffle"));
-    fireEvent.click(screen.getByRole("button", { name: /^q\.txt/ }));
-    await screen.findByRole("heading", { name: "q.txt" });
+    fireEvent.click(screen.getByRole("button", { name: fileItem("q") }));
+    await screen.findByRole("heading", { name: "q" });
     const changes = screen.getByRole("region", { name: "Unsaved changes" });
-    fireEvent.click(within(changes).getByRole("button", { name: "M proxy/p.txt" }));
-    await screen.findByRole("heading", { name: "p.txt" });
+    fireEvent.click(within(changes).getByRole("button", { name: "M proxy/p" }));
+    await screen.findByRole("heading", { name: "p" });
     expect(status()).toContain("Unsaved changes");
   });
 
@@ -339,7 +340,7 @@ describe("saving with the rest of the app", () => {
 
 describe("big files stay responsive", () => {
   const changes = () => screen.getByRole("region", { name: "Unsaved changes" });
-  const listed = () => within(changes()).queryByRole("button", { name: "M proxy/p.txt" });
+  const listed = () => within(changes()).queryByRole("button", { name: "M proxy/p" });
 
   it("shows a spinner while the file is being read", async () => {
     let release!: () => void;
@@ -347,13 +348,13 @@ describe("big files stay responsive", () => {
     backend({ "p.txt": `${A}\r\n${B}` });
     render(<App />);
     fireEvent.click(await screen.findByRole("button", { name: "Proxies" }));
-    fireEvent.click(await screen.findByRole("button", { name: /^p\.txt/ }));
-    expect(await screen.findByText("Loading p.txt…")).toBeTruthy();
+    fireEvent.click(await screen.findByRole("button", { name: fileItem("p") }));
+    expect(await screen.findByText("Loading p…")).toBeTruthy();
     expect(document.querySelector(".loading .spinner")).toBeTruthy();
     expect(screen.queryByRole("textbox", { name: "Proxy list" })).toBeNull();
     release();
     expect(await screen.findByRole("textbox", { name: "Proxy list" })).toBeTruthy();
-    expect(screen.queryByText("Loading p.txt…")).toBeNull();
+    expect(screen.queryByText("Loading p…")).toBeNull();
     await settled();
     expect(status()).toContain("2 proxies");
   });
@@ -403,18 +404,18 @@ describe("big files stay responsive", () => {
     vi.mocked(askSaveDiscardCancel).mockResolvedValue("cancel");
     const calls = vi.mocked(guardWindowClose).mock.calls;
     expect(await calls[calls.length - 1][0]()).toBe(false);
-    expect(vi.mocked(askSaveDiscardCancel).mock.calls[0][0]).toContain("p.txt");
+    expect(vi.mocked(askSaveDiscardCancel).mock.calls[0][0]).toContain("\n  p\n");
   });
 
   it("switching files right after typing keeps what was typed", async () => {
     backend({ "p.txt": A, "q.txt": C });
     await open("p.txt");
     type(`${A}\n${B}`);
-    fireEvent.click(screen.getByRole("button", { name: /^q\.txt/ }));
-    await screen.findByRole("heading", { name: "q.txt" });
+    fireEvent.click(screen.getByRole("button", { name: fileItem("q") }));
+    await screen.findByRole("heading", { name: "q" });
     expect(listed()).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: /^p\.txt/ }));
-    await screen.findByRole("heading", { name: "p.txt" });
+    fireEvent.click(screen.getByRole("button", { name: fileItem("p") }));
+    await screen.findByRole("heading", { name: "p" });
     expect(editor().value).toBe(`${A}\n${B}`);
   });
 

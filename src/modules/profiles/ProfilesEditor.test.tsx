@@ -1,3 +1,4 @@
+import { fileItem } from "../../test/fileList";
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { mockIPC } from "@tauri-apps/api/mocks";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -76,11 +77,11 @@ beforeEach(() => {
   vi.mocked(showMessage).mockResolvedValue();
 });
 
-const fileButton = (name: string) => screen.getByRole("button", { name: new RegExp(`^${name.replace(".", "\\.")}`) });
+const fileButton = (name: string) => screen.getByRole("button", { name: fileItem(name) });
 
 async function openFile(name: string) {
   fireEvent.click(await waitFor(() => fileButton(name)));
-  await screen.findByRole("heading", { name });
+  await screen.findByRole("heading", { name: name.replace(/\.\w+$/, "") });
   await screen.findByLabelText("Row 1 profileName").catch(() => null);
 }
 
@@ -533,12 +534,12 @@ describe("files with changes or errors", () => {
     type(2, "zipcode", "1");
 
     const items = within(changes()).getAllByRole("button", { name: /profile\// });
-    expect(items.map((b) => b.textContent)).toEqual(["M profile/g.csv", "M profile/h.csv"]);
+    expect(items.map((b) => b.textContent)).toEqual(["M profile/g", "M profile/h"]);
     expect(items[1].className).toContain("invalid");
     expect(within(changes()).getByRole("heading").textContent).toBe("Unsaved changes (2)");
 
     fireEvent.click(items[0]);
-    await screen.findByRole("heading", { name: "g.csv" });
+    await screen.findByRole("heading", { name: "g" });
     expect(cell(1, "city").value).toBe("Rockford");
   });
 
@@ -547,8 +548,8 @@ describe("files with changes or errors", () => {
     await open();
     type(1, "city", "Rockford");
     fireEvent.click(button("Tasks"));
-    fireEvent.click(within(changes()).getByRole("button", { name: /profile\/g\.csv/ }));
-    await screen.findByRole("heading", { name: "g.csv" });
+    fireEvent.click(within(changes()).getByRole("button", { name: "M profile/g" }));
+    await screen.findByRole("heading", { name: "g" });
     expect(button("Profiles").getAttribute("aria-current")).toBe("page");
   });
 
@@ -561,10 +562,10 @@ describe("files with changes or errors", () => {
 
     fireEvent.click(within(changes()).getByRole("button", { name: "Save all" }));
     await waitFor(() => expect(within(changes()).getByText(/Saved 1 file\. Not saved:/)).toBeTruthy());
-    expect(within(changes()).getByText(/h\.csv: has errors, fix them first/)).toBeTruthy();
+    expect(within(changes()).getByText(/h: has errors, fix them first/)).toBeTruthy();
     expect(saves).toEqual([{ path: `${DIR}\\g.csv`, text: GOOD.replace("Springfield", "Rockford") }]);
     expect(within(changes()).getAllByRole("button", { name: /profile\// }).map((b) => b.textContent)).toEqual([
-      "M profile/h.csv",
+      "M profile/h",
     ]);
   });
 
@@ -594,7 +595,7 @@ describe("closing with unsaved changes", () => {
     vi.mocked(askSaveDiscardCancel).mockResolvedValueOnce("cancel");
     await expect(shouldClose()).resolves.toBe(false);
     expect(askSaveDiscardCancel).toHaveBeenCalledWith(
-      expect.stringMatching(/unsaved changes in 2 files:[\s\S]*g\.csv[\s\S]*h\.csv[\s\S]*Save them before closing\?/),
+      expect.stringMatching(/unsaved changes in 2 files:\n\n  g\n  h\n\nSave them before closing\?/),
       "Unsaved changes",
     );
     expect(within(changes()).getAllByRole("button", { name: /profile\// })).toHaveLength(2);
@@ -621,7 +622,7 @@ describe("closing with unsaved changes", () => {
     vi.mocked(askSaveDiscardCancel).mockResolvedValueOnce("save");
     await expect(shouldClose()).resolves.toBe(false);
     expect(saves.map((s) => s.path)).toEqual([`${DIR}\\g.csv`]);
-    expect(showMessage).toHaveBeenCalledWith(expect.stringContaining("h.csv: has errors"), "Not everything was saved");
+    expect(showMessage).toHaveBeenCalledWith(expect.stringContaining("h: has errors"), "Not everything was saved");
   });
 
   it("switching folders asks the same way", async () => {

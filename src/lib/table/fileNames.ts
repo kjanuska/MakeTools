@@ -41,3 +41,9 @@ export function copyName(base: string, existing: readonly string[], ext = EXT): 
     if (!taken.has(fileNameFor(name, ext).toLowerCase())) return name;
   }
 }
+
+/** A file name as shown to the user, without its extension: `25.csv` -> `25`. */
+export function displayName(fileName: string): string {
+  const dot = fileName.lastIndexOf(".");
+  return dot > 0 ? fileName.slice(0, dot) : fileName;
+}

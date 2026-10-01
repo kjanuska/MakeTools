@@ -1,3 +1,4 @@
+import { fileItem } from "../../test/fileList";
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { mockIPC } from "@tauri-apps/api/mocks";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -76,8 +77,8 @@ beforeEach(() => {
 async function open(name = "g.csv") {
   render(<App />);
   fireEvent.click(await screen.findByRole("button", { name: "Profiles" }));
-  fireEvent.click(await screen.findByRole("button", { name: new RegExp(`^${name.replace(".", "\\.")}`) }));
-  await screen.findByRole("heading", { name });
+  fireEvent.click(await screen.findByRole("button", { name: fileItem(name) }));
+  await screen.findByRole("heading", { name: name.replace(/\.\w+$/, "") });
   await screen.findByLabelText("Row 1 profileName");
 }
 
@@ -147,10 +148,10 @@ describe("changed cells", () => {
     backend({ "g.csv": GOOD, "h.csv": GOOD });
     await open();
     type(1, "city", "Rockford");
-    fireEvent.click(screen.getByRole("button", { name: /^h\.csv/ }));
-    await screen.findByRole("heading", { name: "h.csv" });
-    fireEvent.click(screen.getByRole("button", { name: /^g\.csv/ }));
-    await screen.findByRole("heading", { name: "g.csv" });
+    fireEvent.click(screen.getByRole("button", { name: fileItem("h") }));
+    await screen.findByRole("heading", { name: "h" });
+    fireEvent.click(screen.getByRole("button", { name: fileItem("g") }));
+    await screen.findByRole("heading", { name: "g" });
     expect(td(1, "city").className).toContain("changed");
   });
 });
@@ -258,8 +259,8 @@ describe("keyboard shortcuts in a group", () => {
     await open();
     press("ArrowLeft", { altKey: true });
     await screen.findByRole("heading", { name: "Profile groups" });
-    fireEvent.click(screen.getByRole("button", { name: /^g\.csv/ }));
-    await screen.findByRole("heading", { name: "g.csv" });
+    fireEvent.click(screen.getByRole("button", { name: fileItem("g") }));
+    await screen.findByRole("heading", { name: "g" });
     press("f", { ctrlKey: true });
     await screen.findByRole("heading", { name: "Profile groups" });
     await waitFor(() => expect(document.activeElement).toBe(screen.getByLabelText("Find by profileName")));
@@ -429,7 +430,7 @@ describe("backups dropdown", () => {
     fireEvent.click(btn("Backups ▾"));
     fireEvent.click((await within(screen.getByRole("dialog", { name: "Backups" })).findAllByRole("button", { name: "Restore" }))[0]);
     await waitFor(() =>
-      expect(confirmAction).toHaveBeenCalledWith(expect.stringContaining("Replace your unsaved changes to g.csv"), "Restore backup"),
+      expect(confirmAction).toHaveBeenCalledWith(expect.stringContaining("Replace your unsaved changes to g with"), "Restore backup"),
     );
     expect(callsOf("read_backup")).toEqual([]);
     expect(cell(1, "city").value).toBe("Rockford");

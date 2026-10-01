@@ -1,4 +1,5 @@
 /// <reference types="node" />
+import { fileItem } from "../../test/fileList";
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import fs from "node:fs";
 import path from "node:path";
@@ -53,8 +54,8 @@ async function openFile(name: string) {
   render(<App />);
   fireEvent.click(await screen.findByRole("button", { name: "Tasks" }));
   await screen.findByRole("heading", { name: "Task files" });
-  fireEvent.click(await screen.findByRole("button", { name: new RegExp(`^${name.replace(".", "\\.")}`) }));
-  await screen.findByRole("heading", { name });
+  fireEvent.click(await screen.findByRole("button", { name: fileItem(name) }));
+  await screen.findByRole("heading", { name: name.replace(/\.\w+$/, "") });
   tab("Tasks");
   // ALL rows count once the profile groups are known.
   await waitFor(() => expect(screen.getByRole("table", { name: "Profile Groups" })).toBeTruthy());
@@ -109,7 +110,7 @@ describe("task counts", () => {
     tab("Raw rows");
     expect(await screen.findByLabelText("Row 1 profileGroup")).toBeTruthy();
     fireEvent.click(btn("← All task files"));
-    fireEvent.click(await screen.findByRole("button", { name: /^raw\.csv/ }));
+    fireEvent.click(await screen.findByRole("button", { name: fileItem("raw") }));
     expect(await screen.findByLabelText("Row 1 profileGroup")).toBeTruthy();
   });
 
@@ -117,8 +118,8 @@ describe("task counts", () => {
     backend({ "bad.csv": "a,b,c\n1,2,3\n" });
     render(<App />);
     fireEvent.click(await screen.findByRole("button", { name: "Tasks" }));
-    fireEvent.click(await screen.findByRole("button", { name: /^bad\.csv/ }));
-    await screen.findByRole("heading", { name: "bad.csv" });
+    fireEvent.click(await screen.findByRole("button", { name: fileItem("bad") }));
+    await screen.findByRole("heading", { name: "bad" });
     tab("Tasks");
     expect(screen.getByText(/open read-only and can't be rebuilt/)).toBeTruthy();
     expect(screen.queryByRole("button", { name: "Apply to file" })).toBeNull();
@@ -493,7 +494,7 @@ describe("task file header", () => {
       "Discard changes",
     ]);
     // The file name and tabs are in the header too; the builder isn't.
-    expect(within(head as HTMLElement).getByRole("heading", { name: "h.csv" })).toBeTruthy();
+    expect(within(head as HTMLElement).getByRole("heading", { name: "h" })).toBeTruthy();
     expect(within(head as HTMLElement).getByRole("tab", { name: "Tasks" })).toBeTruthy();
     expect(head.contains(screen.getByLabelText("Total tasks for 25"))).toBe(false);
     // Only one set of builder buttons.

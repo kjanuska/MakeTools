@@ -1,3 +1,4 @@
+import { fileItem } from "../test/fileList";
 import { mockIPC } from "@tauri-apps/api/mocks";
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -88,10 +89,11 @@ beforeEach(() => {
 });
 
 const files = () => within(screen.getByRole("region", { name: "Files" }));
-const fileButton = (name: string) => files().getByRole("button", { name: new RegExp(`^${name.replace(/\./g, "\\.")}`) });
+const fileButton = (name: string) => files().getByRole("button", { name: fileItem(name) });
 const fileNames = () =>
   files()
-    .queryAllByRole("button", { name: /\.txt/ })
+    .queryAllByRole("button")
+    .filter((b) => b.classList.contains("file-item"))
     .map((b) => b.querySelector("span")!.firstChild!.textContent);
 const menuItem = (name: string) => screen.getByRole("menuitem", { name }) as HTMLButtonElement;
 const lastConfirm = () => vi.mocked(confirmAction).mock.calls[vi.mocked(confirmAction).mock.calls.length - 1][0];
@@ -104,7 +106,7 @@ async function showProxies() {
 
 function rightClick(name: string) {
   fireEvent.contextMenu(fileButton(name), { clientX: 30, clientY: 40 });
-  return screen.getByRole("menu", { name });
+  return screen.getByRole("menu", { name: name.replace(/\.\w+$/, "") });
 }
 
 describe("proxy file right-click menu", () => {
@@ -134,7 +136,7 @@ describe("proxy file right-click menu", () => {
       ["Tasks", "t.csv"],
     ]) {
       fireEvent.click(await screen.findByRole("button", { name: module }));
-      await files().findByRole("button", { name: new RegExp(`^${file.replace(".", "\\.")}`) });
+      await files().findByRole("button", { name: fileItem(file) });
       const menu = rightClick(file);
       expect(within(menu).getAllByRole("menuitem").map((b) => b.textContent)).toEqual(["Duplicate", "Rename…", "Delete…"]);
       fireEvent.keyDown(menu, { key: "Escape" });
@@ -160,7 +162,7 @@ describe("duplicate", () => {
     await showProxies();
     rightClick("wealth.txt");
     fireEvent.click(menuItem("Duplicate"));
-    await waitFor(() => expect(fileNames()).toEqual(["wealth copy.txt", "wealth.txt"]));
+    await waitFor(() => expect(fileNames()).toEqual(["wealth copy", "wealth"]));
     expect(disk.get(P("wealth copy.txt"))).toBe(text);
     expect(writes.map((w) => w.cmd)).toEqual(["create_file"]);
   });
@@ -192,7 +194,7 @@ describe("rename", () => {
     expect(input.value).toBe("wealth");
     fireEvent.change(input, { target: { value: "wealth-2" } });
     fireEvent.keyDown(input, { key: "Enter" });
-    await waitFor(() => expect(fileNames()).toEqual(["wealth-2.txt"]));
+    await waitFor(() => expect(fileNames()).toEqual(["wealth-2"]));
     expect(lastConfirm()).toContain("Rename proxy file wealth to wealth-2?");
     expect(lastConfirm()).toContain('3 tasks in 2 task files use "wealth" as the proxy group');
     expect(lastConfirm()).toContain("backed up first");
@@ -205,7 +207,7 @@ describe("rename", () => {
     const input = await startRename("wealth.txt");
     fireEvent.change(input, { target: { value: "w2" } });
     fireEvent.keyDown(input, { key: "Enter" });
-    await waitFor(() => expect(fileNames()).toEqual(["w2.txt"]));
+    await waitFor(() => expect(fileNames()).toEqual(["w2"]));
     expect(lastConfirm()).not.toContain("task");
   });
 
@@ -213,11 +215,11 @@ describe("rename", () => {
     backend({ "wealth.txt": A });
     await showProxies();
     fireEvent.click(fileButton("wealth.txt"));
-    await screen.findByRole("heading", { name: "wealth.txt" });
+    await screen.findByRole("heading", { name: "wealth" });
     const input = await startRename("wealth.txt");
     fireEvent.change(input, { target: { value: "w2" } });
     fireEvent.keyDown(input, { key: "Enter" });
-    expect(await screen.findByRole("heading", { name: "w2.txt" })).toBeTruthy();
+    expect(await screen.findByRole("heading", { name: "w2" })).toBeTruthy();
     expect((screen.getByRole("textbox", { name: "Proxy list" }) as HTMLTextAreaElement).value).toBe(A);
   });
 
@@ -258,7 +260,7 @@ describe("rename", () => {
     fireEvent.keyDown(input, { key: "Enter" });
     await waitFor(() => expect(confirmAction).toHaveBeenCalled());
     expect(writes).toEqual([]);
-    expect(fileNames()).toEqual(["wealth.txt"]);
+    expect(fileNames()).toEqual(["wealth"]);
   });
 
   it("a failed rename says why", async () => {
@@ -279,7 +281,7 @@ describe("delete", () => {
     await showProxies();
     rightClick("wealth.txt");
     fireEvent.click(menuItem("Delete…"));
-    await waitFor(() => expect(fileNames()).toEqual(["us.txt"]));
+    await waitFor(() => expect(fileNames()).toEqual(["us"]));
     expect(lastConfirm()).toContain("Delete proxy file wealth (2 proxies)?");
     expect(lastConfirm()).toContain('1 task in 1 task file uses "wealth" as the proxy group');
     expect(lastConfirm()).toContain("backup is kept for 7 days");
@@ -290,7 +292,7 @@ describe("delete", () => {
     backend({ "wealth.txt": A, "us.txt": B });
     await showProxies();
     fireEvent.click(fileButton("wealth.txt"));
-    await screen.findByRole("heading", { name: "wealth.txt" });
+    await screen.findByRole("heading", { name: "wealth" });
     rightClick("wealth.txt");
     fireEvent.click(menuItem("Delete…"));
     expect(await screen.findByText("Select a proxy file.")).toBeTruthy();
@@ -304,20 +306,21 @@ describe("delete", () => {
     fireEvent.click(menuItem("Delete…"));
     await waitFor(() => expect(confirmAction).toHaveBeenCalled());
     expect(writes).toEqual([]);
-    expect(fileNames()).toEqual(["wealth.txt"]);
+    expect(fileNames()).toEqual(["wealth"]);
   });
 });
 
 describe("other modules", () => {
-  const names = (ext: string) =>
+  const names = () =>
     files()
-      .queryAllByRole("button", { name: new RegExp(`\\${ext}`) })
+      .queryAllByRole("button")
+      .filter((b) => b.classList.contains("file-item"))
       .map((b) => b.querySelector("span")!.firstChild!.textContent);
 
   async function show(module: string, file: string) {
     render(<App />);
     fireEvent.click(await screen.findByRole("button", { name: module }));
-    await files().findByRole("button", { name: new RegExp(`^${file.replace(".", "\\.")}`) });
+    await files().findByRole("button", { name: fileItem(file) });
   }
 
   async function renameTo(file: string, name: string) {
@@ -335,7 +338,7 @@ describe("other modules", () => {
     await show("Profiles", "25.csv");
     rightClick("25.csv");
     fireEvent.click(menuItem("Duplicate"));
-    await waitFor(() => expect(names(".csv")).toEqual(["25 copy.csv", "25.csv"]));
+    await waitFor(() => expect(names()).toEqual(["25 copy", "25"]));
     expect(disk.get(`${ROOT}\\profile\\25 copy.csv`)).toBe(PROFILES);
   });
 
@@ -343,7 +346,7 @@ describe("other modules", () => {
     backend({}, { "a.csv": taskFile([task(), task({ group: "5" })]) }, { "profile\\25.csv": PROFILES });
     await show("Profiles", "25.csv");
     await renameTo("25.csv", "26");
-    await waitFor(() => expect(names(".csv")).toEqual(["26.csv"]));
+    await waitFor(() => expect(names()).toEqual(["26"]));
     expect(lastConfirm()).toContain("Rename profile group 25 to 26?");
     expect(lastConfirm()).toContain('1 task in 1 task file uses "25" as the profile group');
     expect(writes).toEqual([
@@ -356,30 +359,30 @@ describe("other modules", () => {
     await show("Profiles", "25.csv");
     rightClick("25.csv");
     fireEvent.click(menuItem("Delete…"));
-    await waitFor(() => expect(names(".csv")).toEqual([]));
+    await waitFor(() => expect(names()).toEqual([]));
     expect(lastConfirm()).toContain("Delete profile group 25 (2 profiles)?");
   });
 
   it("tasks: delete says how many rows, with no task warning, and closes the open file", async () => {
     backend({}, { "a.csv": taskFile([task(), task()]), "b.csv": taskFile([task()]) });
     await show("Tasks", "a.csv");
-    fireEvent.click(files().getByRole("button", { name: /^a\.csv/ }));
-    await screen.findByRole("heading", { name: "a.csv" });
+    fireEvent.click(files().getByRole("button", { name: fileItem("a") }));
+    await screen.findByRole("heading", { name: "a" });
     rightClick("a.csv");
     fireEvent.click(menuItem("Delete…"));
-    await waitFor(() => expect(names(".csv")).toEqual(["b.csv"]));
+    await waitFor(() => expect(names()).toEqual(["b"]));
     expect(lastConfirm()).toContain("Delete task file a (2 rows)?");
     expect(lastConfirm()).not.toContain("uses");
-    expect(screen.queryByRole("heading", { name: "a.csv" })).toBeNull();
+    expect(screen.queryByRole("heading", { name: "a" })).toBeNull();
   });
 
   it("tasks: rename keeps the open file open under its new name", async () => {
     backend({}, { "a.csv": taskFile([task()]) });
     await show("Tasks", "a.csv");
-    fireEvent.click(files().getByRole("button", { name: /^a\.csv/ }));
-    await screen.findByRole("heading", { name: "a.csv" });
+    fireEvent.click(files().getByRole("button", { name: fileItem("a") }));
+    await screen.findByRole("heading", { name: "a" });
     await renameTo("a.csv", "drop");
-    expect(await screen.findByRole("heading", { name: "drop.csv" })).toBeTruthy();
+    expect(await screen.findByRole("heading", { name: "drop" })).toBeTruthy();
     expect(disk.has(`${ROOT}\\task\\drop.csv`)).toBe(true);
   });
 
@@ -391,12 +394,12 @@ describe("other modules", () => {
     );
     await show("Accounts", "example.txt");
     await renameTo("example.txt", "main");
-    await waitFor(() => expect(names(".txt")).toEqual(["main.txt"]));
+    await waitFor(() => expect(names()).toEqual(["main"]));
     expect(lastConfirm()).toContain("Rename account file example to main?");
     expect(lastConfirm()).toContain('2 tasks in 1 task file use "example" as the account group');
     rightClick("main.txt");
     fireEvent.click(menuItem("Delete…"));
-    await waitFor(() => expect(names(".txt")).toEqual([]));
+    await waitFor(() => expect(names()).toEqual([]));
     expect(lastConfirm()).toContain("Delete account file main (2 accounts)?");
   });
 

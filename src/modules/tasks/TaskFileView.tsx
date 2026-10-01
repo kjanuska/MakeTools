@@ -1,5 +1,6 @@
 // A task file: its task counts (per group, input, proxy group, mode…) next to
 // the builder that regenerates it, or the raw rows in the shared table editor.
+import { displayName } from "../../lib/table/fileNames";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { BackupsMenu } from "../../components/table/BackupsMenu";
 import { TableEditor } from "../../components/table/TableEditor";
@@ -129,7 +130,7 @@ export function TaskFileView(props: Props) {
     const loadError = store.loadError(file.path);
     return (
       <div className="file-panel">
-        <h2>{file.name}</h2>
+        <h2>{displayName(file.name)}</h2>
         {loadError && <p className="error">Couldn't read file: {loadError}</p>}
       </div>
     );
@@ -154,7 +155,7 @@ export function TaskFileView(props: Props) {
       <div className="task-head" ref={setHead}>
         <div className="editor-head">
           <button onClick={onBack}>← All task files</button>
-          <h2>{file.name}</h2>
+          <h2>{displayName(file.name)}</h2>
           <span className="spacer" />
           <BackupsMenu
             file={file}

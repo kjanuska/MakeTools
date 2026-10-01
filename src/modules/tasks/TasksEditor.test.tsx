@@ -1,3 +1,4 @@
+import { fileItem } from "../../test/fileList";
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import App from "../../App";
@@ -45,8 +46,8 @@ async function openTasks() {
 
 async function openTaskFile(name = "t.csv") {
   await openTasks();
-  fireEvent.click(await screen.findByRole("button", { name: new RegExp(`^${name.replace(".", "\\.")}`) }));
-  await screen.findByRole("heading", { name });
+  fireEvent.click(await screen.findByRole("button", { name: fileItem(name) }));
+  await screen.findByRole("heading", { name: name.replace(/\.\w+$/, "") });
   // Task files open on their summary; the grid is under "Raw rows".
   fireEvent.click(screen.getByRole("tab", { name: "Raw rows" }));
   await screen.findByLabelText("Row 1 profileGroup");
@@ -85,7 +86,7 @@ describe("task overview", () => {
       .map((r) => [...r.querySelectorAll("td")].map((t) => t.textContent));
     expect(rows).toEqual([["shop.topps.com", "a", "2", "site"]]);
     fireEvent.click(within(matches).getByRole("button", { name: "shop.topps.com" }));
-    await screen.findByRole("heading", { name: "a.csv" });
+    await screen.findByRole("heading", { name: "a" });
     await waitFor(() => expect(status()).toContain("1 selected"));
   });
 });
@@ -104,7 +105,7 @@ describe("automatic fixes", () => {
     expect(cell(2, "profileGroup").closest("tr")!.className).not.toContain("new-row");
     // …but the file needs saving.
     expect(status()).toContain("Unsaved changes");
-    expect(screen.getByRole("button", { name: /^t\.csv/ }).textContent).toContain("●");
+    expect(screen.getByRole("button", { name: fileItem("t") }).textContent).toContain("●");
     fireEvent.click(btn("Save"));
     await waitFor(() => expect(saves()).toHaveLength(1));
     expect(disk.get(`${ROOT}\\task\\t.csv`)).toBe(
@@ -161,11 +162,11 @@ describe("task cells", () => {
     backend({ "t.csv": taskFile([task()]) });
     render(<App />);
     fireEvent.click(await screen.findByRole("button", { name: "Profiles" }));
-    fireEvent.click(await screen.findByRole("button", { name: /^25\.csv/ }));
+    fireEvent.click(await screen.findByRole("button", { name: fileItem("25") }));
     await screen.findByLabelText("Row 1 profileName");
     fireEvent.click(btn("Add row"));
     fireEvent.click(btn("Tasks"));
-    fireEvent.click(await screen.findByRole("button", { name: /^t\.csv/ }));
+    fireEvent.click(await screen.findByRole("button", { name: fileItem("t") }));
     await screen.findByLabelText("Row 1 profileGroup");
     await waitFor(() => expect(options(cell(1, "profileName"))).toEqual(["ALL", "1", "2", "3", "4"]));
     expect(extra(1, "tasks").textContent).toBe("4");
@@ -317,7 +318,7 @@ describe("sites", () => {
     fireEvent.click(within(sites).getByRole("button", { name: "Rename kith.com" }));
     fireEvent.change(within(sites).getByLabelText("New name for kith.com"), { target: { value: "eu.kith.com" } });
     fireEvent.click(within(sites).getByRole("button", { name: "Save" }));
-    await waitFor(() => expect(within(sites).getByText(/Not saved yet: a.csv \(it has other unsaved changes\)/)).toBeTruthy());
+    await waitFor(() => expect(within(sites).getByText(/Not saved yet: a \(it has other unsaved changes\)/)).toBeTruthy());
     expect(disk.get(`${ROOT}\\task\\a.csv`)).toBe(taskFile([task()]));
     fireEvent.click(btn("⚙ Settings"));
     await screen.findByLabelText("Row 1 site");
@@ -349,7 +350,7 @@ describe("sites", () => {
     await waitFor(() => expect(setSites).toHaveBeenLastCalledWith(["shop.topps.com"]));
     expect(confirmAction).toHaveBeenCalledWith(expect.stringContaining("1 task in 1 file still use it"), "Remove site");
     fireEvent.click(btn("⚙ Settings"));
-    fireEvent.click(await screen.findByRole("button", { name: /^a\.csv/ }));
+    fireEvent.click(await screen.findByRole("button", { name: fileItem("a") }));
     await screen.findByLabelText("Row 1 site");
     await waitFor(() => expect(cell(1, "site").title).toBe("site isn't in the site list"));
   });
@@ -396,11 +397,11 @@ describe("editing task files", () => {
     const panel = screen.getByRole("region", { name: "Move or copy to task file" });
     fireEvent.change(within(panel).getByRole("combobox"), { target: { value: `${ROOT}\\task\\b.csv` } });
     fireEvent.click(within(panel).getByRole("button", { name: /^Move/ }));
-    expect(status()).toContain("Moved 1 task to b.csv (not saved yet).");
+    expect(status()).toContain("Moved 1 task to b (not saved yet).");
     const changes = screen.getByRole("region", { name: "Unsaved changes" });
     expect(within(changes).getAllByRole("button", { name: /task\// }).map((b) => b.textContent)).toEqual([
-      "M task/a.csv",
-      "M task/b.csv",
+      "M task/a",
+      "M task/b",
     ]);
     fireEvent.click(within(changes).getByRole("button", { name: "Save all" }));
     await within(changes).findByText("Saved 2 files.");
@@ -413,7 +414,7 @@ describe("editing task files", () => {
     await openTasks();
     fireEvent.change(screen.getByRole("textbox", { name: /New task file/ }), { target: { value: "drop" } });
     fireEvent.click(btn("Create"));
-    await screen.findByRole("heading", { name: "drop.csv" });
+    await screen.findByRole("heading", { name: "drop" });
     expect(disk.get(`${ROOT}\\task\\drop.csv`)).toBe(`${H}\n`);
   });
 });

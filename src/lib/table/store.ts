@@ -1,5 +1,6 @@
 // Keeps every opened/scanned file of one module in memory, with its unsaved
 // edits, so the user can move between files and save later (or all at once).
+import { displayName } from "./fileNames";
 import { useSyncExternalStore } from "react";
 import { parseTable, serializeTable, type TableDoc } from "../formats/csvTable";
 import { readText, saveText, type FileEntry, type TextFile } from "../fs";
@@ -212,14 +213,14 @@ export class TableStore<Ctx = unknown> {
     const { item, items, file } = this.schema.labels;
     if (!src || !dst || from === to) return { ok: false, error: `Pick another ${file}.` };
     const readOnly = [src, dst].find((e) => !e.doc.headerOk);
-    if (readOnly) return { ok: false, error: `${readOnly.file.name} is read-only (wrong header).` };
+    if (readOnly) return { ok: false, error: `${displayName(readOnly.file.name)} is read-only (wrong header).` };
     const values = selectedValues(src.doc, ids);
     if (values.length === 0) return { ok: false, error: `Select ${item} rows first.` };
     const col = this.schema.nameCol;
     if (col !== null) {
       const clashes = nameClashes(this.schema, dst.doc, values.map((v) => v[col]));
       if (clashes.length) {
-        return { ok: false, error: `${dst.file.name} already has ${items} named: ${clashes.join(", ")}. Rename them first.` };
+        return { ok: false, error: `${displayName(dst.file.name)} already has ${items} named: ${clashes.join(", ")}. Rename them first.` };
       }
     }
     this.entries.set(to, this.withDoc(dst, importRows(this.schema, dst.doc, values)));

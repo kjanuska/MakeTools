@@ -6,6 +6,7 @@
 // while they catch up), and the typed text is passed to the store after a
 // pause in typing, or straight away before anything that needs it (save,
 // shuffle, discard, a backup, leaving the editor, Save all, closing).
+import { displayName } from "../../lib/table/fileNames";
 import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
 import { BackupsMenu } from "../../components/table/BackupsMenu";
 import { useFileActions } from "../../components/table/useFileActions";
@@ -105,12 +106,12 @@ export function ProxyFileView({ file, store, confirmOverwrite, onSaved }: Props)
     const loadError = store.loadError(file.path);
     return (
       <div className="file-panel">
-        <h2>{file.name}</h2>
+        <h2>{displayName(file.name)}</h2>
         {loadError ? (
           <p className="error">Couldn't read file: {loadError}</p>
         ) : (
           <p className="loading">
-            <span className="spinner" aria-hidden="true" /> Loading {file.name}…
+            <span className="spinner" aria-hidden="true" /> Loading {displayName(file.name)}…
           </p>
         )}
       </div>
@@ -177,7 +178,7 @@ export function ProxyFileView({ file, store, confirmOverwrite, onSaved }: Props)
   return (
     <div className="proxy-file">
       <div className="editor-head">
-        <h2>{file.name}</h2>
+        <h2>{displayName(file.name)}</h2>
         <span className="spacer" />
         <BackupsMenu
           file={file}

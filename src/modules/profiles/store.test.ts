@@ -232,7 +232,7 @@ describe("ProfileStore.transfer", () => {
   it("refuses when a name already exists in the target, changing nothing", async () => {
     const { store, p, rowIds } = await setup({ "a.csv": GOOD, "b.csv": `${H}\r\n${row("2")}\r\n` });
     const r = store.transfer(p("a.csv"), p("b.csv"), rowIds("a.csv"), "move");
-    expect(r).toEqual({ ok: false, error: "b.csv already has profiles named: 2. Rename them first." });
+    expect(r).toEqual({ ok: false, error: "b already has profiles named: 2. Rename them first." });
     expect(store.dirtyEntries()).toEqual([]);
   });
 
@@ -251,7 +251,7 @@ describe("ProfileStore.transfer", () => {
     const { store, p, rowIds } = await setup({ "a.csv": GOOD, "x.csv": "a,b\r\n" });
     expect(store.transfer(p("a.csv"), p("x.csv"), rowIds("a.csv"), "copy")).toEqual({
       ok: false,
-      error: "x.csv is read-only (wrong header).",
+      error: "x is read-only (wrong header).",
     });
     expect(store.transfer(p("a.csv"), p("a.csv"), rowIds("a.csv"), "copy")).toEqual({ ok: false, error: "Pick another group." });
   });

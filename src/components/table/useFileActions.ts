@@ -1,6 +1,7 @@
 // Save, discard and restore-a-backup for one file of a table store, with the
 // status and error messages they show. Shared by the table editor and any
 // other view of a file (e.g. the task summary).
+import { displayName } from "../../lib/table/fileNames";
 import { useState } from "react";
 import { confirmAction } from "../../lib/dialogs";
 import { formatDateTime } from "../../lib/format";
@@ -41,7 +42,7 @@ export function useFileActions(
   }
 
   async function discard() {
-    const ok = await confirmAction(`Discard all unsaved changes to ${file.name}?`, "Discard changes");
+    const ok = await confirmAction(`Discard all unsaved changes to ${displayName(file.name)}?`, "Discard changes");
     if (!ok) return;
     store.discard(file.path);
     setStatus(null);
@@ -53,7 +54,7 @@ export function useFileActions(
     setError(null);
     if (store.get(file.path)?.dirty) {
       const ok = await confirmAction(
-        `Replace your unsaved changes to ${file.name} with the backup from ${when}?`,
+        `Replace your unsaved changes to ${displayName(file.name)} with the backup from ${when}?`,
         "Restore backup",
       );
       if (!ok) return false;

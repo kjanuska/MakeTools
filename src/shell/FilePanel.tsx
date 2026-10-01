@@ -1,3 +1,4 @@
+import { displayName } from "../lib/table/fileNames";
 import { useCallback, useEffect, useState } from "react";
 import { LINE_ENDING_LABELS, formatSize, utf8Length } from "../lib/format";
 import { readText, type FileEntry, type TextFile } from "../lib/fs";
@@ -28,7 +29,7 @@ export function FilePanel({ file, onChanged }: Props) {
 
   return (
     <div className="file-panel">
-      <h2>{file.name}</h2>
+      <h2>{displayName(file.name)}</h2>
       <p className="muted path">{file.path}</p>
       {error && <p className="error">Couldn't read file: {error}</p>}
       {info && (

@@ -1,3 +1,4 @@
+import { displayName } from "../lib/table/fileNames";
 import { useCallback, useEffect, useState } from "react";
 import { confirmAction } from "../lib/dialogs";
 import { formatDateTime, formatSize } from "../lib/format";
@@ -25,7 +26,7 @@ export function BackupsPanel({ file, onRestored }: Props) {
   async function restore(b: BackupEntry) {
     const when = formatDateTime(b.createdMs);
     const ok = await confirmAction(
-      `Replace ${file.name} with the backup from ${when}?\n\nThe current version is backed up first, so this can be undone.`,
+      `Replace ${displayName(file.name)} with the backup from ${when}?\n\nThe current version is backed up first, so this can be undone.`,
       "Restore backup",
     );
     if (!ok) return;
