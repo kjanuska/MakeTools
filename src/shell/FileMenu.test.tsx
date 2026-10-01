@@ -192,6 +192,8 @@ describe("rename", () => {
     await showProxies();
     const input = await startRename("wealth.txt");
     expect(input.value).toBe("wealth");
+    // No extension next to the box either.
+    expect(input.closest(".file-rename")!.textContent).not.toContain(".txt");
     fireEvent.change(input, { target: { value: "wealth-2" } });
     fireEvent.keyDown(input, { key: "Enter" });
     await waitFor(() => expect(fileNames()).toEqual(["wealth-2"]));

@@ -166,6 +166,8 @@ describe("modules and file list", () => {
     const calls = backend();
     render(<App />);
     await screen.findByRole("button", { name: fileItem("popmart") });
+    // Names are shown without their extension.
+    expect(screen.getByRole("region", { name: "Files" }).textContent).not.toMatch(/\.(txt|csv)/);
     // The file's count, not its size.
     expect(screen.queryByText("2.0 KB")).toBeNull();
 
@@ -183,9 +185,9 @@ describe("modules and file list", () => {
     ]);
 
     fireEvent.click(screen.getByRole("button", { name: "Profiles" }));
-    expect(await screen.findByText("No .csv files.")).toBeTruthy();
+    expect(await screen.findByText("No files.")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Proxies" }));
-    expect(await screen.findByText("No .txt files.")).toBeTruthy();
+    expect(await screen.findByText("No files.")).toBeTruthy();
     expect(callsOf(calls, "list_files")).toHaveLength(4);
   });
 

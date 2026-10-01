@@ -522,7 +522,6 @@ export default function App() {
       </aside>
       <FileList
         dir={dir}
-        extension={mod.extension}
         files={list.files}
         error={list.error}
         selectedPath={selected?.path ?? null}

@@ -6,7 +6,6 @@ import type { FileCount } from "./useFileCounts";
 
 interface Props {
   dir: string;
-  extension: string;
   /** Null while loading or if the folder couldn't be listed. */
   files: FileEntry[] | null;
   error: string | null;
@@ -41,7 +40,7 @@ export interface FileMarker {
 }
 
 export function FileList(props: Props) {
-  const { dir, extension, files, error, selectedPath, onSelect, onRefresh, marker, menuFor, renaming, count } = props;
+  const { dir, files, error, selectedPath, onSelect, onRefresh, marker, menuFor, renaming, count } = props;
   const [menu, setMenu] = useState<{ file: FileEntry; x: number; y: number } | null>(null);
   const menuContent = menu && menuFor?.(menu.file);
 
@@ -61,9 +60,7 @@ export function FileList(props: Props) {
   return (
     <section className="file-list" aria-label="Files">
       <div className="file-list-head">
-        <span className="muted" title={dir}>
-          *.{extension}
-        </span>
+        <span />
         <button onClick={onRefresh}>Refresh</button>
       </div>
       {error && (
@@ -71,7 +68,7 @@ export function FileList(props: Props) {
           Couldn't list {dir}: {error}
         </p>
       )}
-      {files && files.length === 0 && <p className="muted">No .{extension} files.</p>}
+      {files && files.length === 0 && <p className="muted">No files.</p>}
       {files && files.length > 0 && (
         <ul>
           {files.map((f) => {
@@ -81,7 +78,7 @@ export function FileList(props: Props) {
             return (
               <li key={f.path}>
                 {renaming?.path === f.path ? (
-                  <RenameBox renaming={renaming} extension={extension} />
+                  <RenameBox renaming={renaming} />
                 ) : (
                 <button
                   className={`file-item${m?.invalid ? " invalid" : ""}`}
@@ -122,7 +119,7 @@ export function FileList(props: Props) {
 }
 
 /** The file name as a text box: Enter renames, Escape or clicking away cancels. */
-function RenameBox({ renaming, extension }: { renaming: Renaming; extension: string }) {
+function RenameBox({ renaming }: { renaming: Renaming }) {
   const { value, error, onChange, onSubmit, onCancel } = renaming;
   return (
     <div className="file-rename">
@@ -146,7 +143,6 @@ function RenameBox({ renaming, extension }: { renaming: Renaming; extension: str
           aria-invalid={error ? true : undefined}
           spellCheck={false}
         />
-        <span className="muted">.{extension}</span>
       </div>
       {error && <p className="error">{error}</p>}
     </div>
