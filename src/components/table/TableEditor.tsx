@@ -16,7 +16,7 @@ import {
   type ImportResult,
 } from "../../lib/table/ops";
 import { useStoreVersion, type ConfirmOverwrite, type TableStore } from "../../lib/table/store";
-import { LoadingPanel, useFirstPaintDone } from "../LoadingPanel";
+import { LoadingNote, LoadingPanel, useFirstPaintDone } from "../LoadingPanel";
 import { BackupsMenu } from "./BackupsMenu";
 import { useFileActions } from "./useFileActions";
 import { Cell } from "./cells";
@@ -80,7 +80,7 @@ export function TableEditor<Ctx>({ file, store, ui, confirmOverwrite, onSaved, f
   const focusRow = useRef<number | null>(null);
   const shortcutHandlers = useRef<Partial<Record<ActionId, () => void>>>({});
   useShortcutsRef(shortcutHandlers);
-  // The grid is drawn after a first paint, so a big file opens at once with a spinner.
+  // The rows are drawn after a first paint, so opening a big file shows its toolbar at once.
   const painted = useFirstPaintDone();
 
   const entry = store.get(file.path);
@@ -206,9 +206,15 @@ export function TableEditor<Ctx>({ file, store, ui, confirmOverwrite, onSaved, f
     }
   }, []);
 
-  if (!entry || !doc || !painted) {
+  if (!entry || !doc) {
     shortcutHandlers.current = { back: onBack };
-    return <LoadingPanel name={displayName(file.name)} error={loadError} />;
+    return (
+      <LoadingPanel
+        name={displayName(file.name)}
+        error={loadError}
+        back={{ label: `← All ${filesLabel}`, onClick: onBack }}
+      />
+    );
   }
 
   const { dirty, errors, errorCount, loaded } = entry;
@@ -333,7 +339,7 @@ export function TableEditor<Ctx>({ file, store, ui, confirmOverwrite, onSaved, f
             {dirty && <span className="unsaved"> · Unsaved changes</span>}
             {status && <span className="status"> · {status}</span>}
           </p>
-          {errorCount > 0 && <ErrorList fields={fields} rows={doc.rows} errors={errors} />}
+          {painted && errorCount > 0 && <ErrorList fields={fields} rows={doc.rows} errors={errors} />}
 
           {adding && addType?.kind === "select" && addType.add && (
             <AddOptionPanel prompt={addType.add.prompt} onAdd={finishAdd} onCancel={() => setAdding(null)} />
@@ -391,56 +397,60 @@ export function TableEditor<Ctx>({ file, store, ui, confirmOverwrite, onSaved, f
         </>
       )}
 
-      <div className="grid-wrap">
-        <table className="grid" ref={gridRef}>
-          <thead>
-            <tr>
-              <th
-                className="row-head corner"
-                title="Select all rows"
-                aria-label="Select all rows"
-                aria-selected={allSelected}
-                onClick={() =>
-                  !readOnly &&
-                  setSelection(allSelected ? EMPTY_SELECTION : { ids: new Set(rowIds), anchor: rowIds[0] ?? null })
-                }
-              >
-                #
-              </th>
-              {fields.map((f, col) => [
-                <th key={f}>
-                  {f}
-                  {ui.optional(col) && <span className="muted"> (optional)</span>}
-                </th>,
-                ...extras.filter((x) => x.after === col).map((x) => <th key={`x-${x.header}`}>{x.header}</th>),
-              ])}
-            </tr>
-          </thead>
-          <tbody>
-            {doc.rows.map((r, i) => (
-              <GridRow
-                key={r.id}
-                ui={ui}
-                ctx={ctx}
-                row={r}
-                index={i}
-                errors={errors.get(r.id)}
-                original={entry.original.get(r.id)}
-                selected={selection.ids.has(r.id)}
-                readOnly={readOnly}
-                focusCol={focus?.rowId === r.id ? focus.col : null}
-                onCell={onCell}
-                onRowHead={onRowHead}
-                onCellKey={onCellKey}
-                onCellFocus={onCellFocus}
-                onCellBlur={onCellBlur}
-                onRequestAdd={onRequestAdd}
-              />
-            ))}
-          </tbody>
-        </table>
-        {doc.rows.length === 0 && <p className="muted">This {fileLabel} is empty.</p>}
-      </div>
+      {!painted ? (
+        <LoadingNote label={displayName(file.name)} />
+      ) : (
+        <div className="grid-wrap">
+          <table className="grid" ref={gridRef}>
+            <thead>
+              <tr>
+                <th
+                  className="row-head corner"
+                  title="Select all rows"
+                  aria-label="Select all rows"
+                  aria-selected={allSelected}
+                  onClick={() =>
+                    !readOnly &&
+                    setSelection(allSelected ? EMPTY_SELECTION : { ids: new Set(rowIds), anchor: rowIds[0] ?? null })
+                  }
+                >
+                  #
+                </th>
+                {fields.map((f, col) => [
+                  <th key={f}>
+                    {f}
+                    {ui.optional(col) && <span className="muted"> (optional)</span>}
+                  </th>,
+                  ...extras.filter((x) => x.after === col).map((x) => <th key={`x-${x.header}`}>{x.header}</th>),
+                ])}
+              </tr>
+            </thead>
+            <tbody>
+              {doc.rows.map((r, i) => (
+                <GridRow
+                  key={r.id}
+                  ui={ui}
+                  ctx={ctx}
+                  row={r}
+                  index={i}
+                  errors={errors.get(r.id)}
+                  original={entry.original.get(r.id)}
+                  selected={selection.ids.has(r.id)}
+                  readOnly={readOnly}
+                  focusCol={focus?.rowId === r.id ? focus.col : null}
+                  onCell={onCell}
+                  onRowHead={onRowHead}
+                  onCellKey={onCellKey}
+                  onCellFocus={onCellFocus}
+                  onCellBlur={onCellBlur}
+                  onRequestAdd={onRequestAdd}
+                />
+              ))}
+            </tbody>
+          </table>
+          {doc.rows.length === 0 && <p className="muted">This {fileLabel} is empty.</p>}
+        </div>
+      )}
     </div>
   );
 }

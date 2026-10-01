@@ -2,7 +2,7 @@
 // the builder that regenerates it, or the raw rows in the shared table editor.
 import { displayName } from "../../lib/table/fileNames";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { LoadingPanel, useFirstPaintDone } from "../../components/LoadingPanel";
+import { LoadingNote, LoadingPanel, useFirstPaintDone } from "../../components/LoadingPanel";
 import { BackupsMenu } from "../../components/table/BackupsMenu";
 import { TableEditor } from "../../components/table/TableEditor";
 import type { TableUI } from "../../components/table/types";
@@ -91,7 +91,7 @@ export function TaskFileView(props: Props) {
   );
   const handlersRef = useRef<Partial<Record<ActionId, () => void>>>({});
   useShortcutsRef(handlersRef);
-  // The counts and builder are worked out and drawn after a first paint, so a big file opens at once with a spinner.
+  // The counts and builder are worked out and drawn after a first paint, so the header and toolbar show at once.
   const painted = useFirstPaintDone();
 
   useEffect(() => {
@@ -129,9 +129,15 @@ export function TaskFileView(props: Props) {
     );
   }
 
-  if (!entry || !painted) {
+  if (!entry) {
     handlersRef.current = { back: onBack };
-    return <LoadingPanel name={displayName(file.name)} error={store.loadError(file.path)} />;
+    return (
+      <LoadingPanel
+        name={displayName(file.name)}
+        error={store.loadError(file.path)}
+        back={{ label: "← All task files", onClick: onBack }}
+      />
+    );
   }
 
   const { dirty, errorCount } = entry;
@@ -198,7 +204,9 @@ export function TaskFileView(props: Props) {
         )}
       </div>
 
-      {readOnly ? (
+      {!painted ? (
+        <LoadingNote label={displayName(file.name)} />
+      ) : readOnly ? (
         <BreakdownView b={summary} />
       ) : (
         <TaskBuilder

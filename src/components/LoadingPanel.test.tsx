@@ -1,5 +1,6 @@
 import { mockIPC } from "@tauri-apps/api/mocks";
-import { act, fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { Profiler } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import App from "../App";
 import { PROFILE_HEADER } from "../lib/formats/profiles";
@@ -8,7 +9,7 @@ import type { FileEntry } from "../lib/fs";
 import { getMakebotPath } from "../lib/settings";
 import { guardWindowClose } from "../lib/window";
 import { fileItem } from "../test/fileList";
-import { LoadingPanel, SPINNER_DELAY_MS, useFirstPaintDone } from "./LoadingPanel";
+import { AfterFirstPaint, LoadingNote, LoadingPanel, SPINNER_DELAY_MS, useFirstPaintDone } from "./LoadingPanel";
 
 vi.mock("../lib/settings", () => ({
   getMakebotPath: vi.fn(),
@@ -73,56 +74,192 @@ beforeEach(() => {
   gate = null;
 });
 
+const $ = (selector: string) => document.querySelector(selector);
+const spinner = () => $(".loading .spinner");
+const busy = () => $('[aria-busy="true"]');
+const heading = () => $("main h2")?.textContent;
+const nav = (name: string) => screen.getByRole("button", { name });
+
+/**
+ * What each commit (each frame React draws) showed, checked while React is
+ * committing it, so frames replaced right after are still seen.
+ */
+let frames: Record<string, boolean>[] = [];
+let checks: Record<string, () => boolean> = {};
+
+async function start() {
+  render(
+    <Profiler
+      id="app"
+      onRender={() => frames.push(Object.fromEntries(Object.entries(checks).map(([k, f]) => [k, f()])))}
+    >
+      <App />
+    </Profiler>,
+  );
+  fireEvent.click(await screen.findByRole("button", { name: "Profiles" }));
+  await screen.findByRole("heading", { name: "Profile groups" });
+  // The start-up scans are done once the file list shows the group's count.
+  await waitFor(() => expect($(".file-count")).toBeTruthy());
+}
+
+/** Clicks and returns the frames drawn until things settle. */
+async function framesOf(el: Element, watch: Record<string, () => boolean>) {
+  checks = watch;
+  frames = [];
+  act(() => {
+    fireEvent.click(el);
+  });
+  await act(() => new Promise((r) => setTimeout(r, 50)));
+  checks = {};
+  return frames;
+}
+
 async function openIn(module: string, file: string) {
   render(<App />);
   fireEvent.click(await screen.findByRole("button", { name: module }));
   fireEvent.click(await screen.findByRole("button", { name: fileItem(file) }));
 }
 
-const spinner = () => document.querySelector(".file-panel .loading .spinner");
+describe("a click draws the new page's frame first; the slow part comes right after", () => {
+  it("opening a profile group: header and toolbar, then the rows", async () => {
+    backend();
+    await start();
+    const f = await framesOf(screen.getByRole("button", { name: fileItem("g.csv") }), {
+      toolbar: () => !!$(".table-editor .toolbar"),
+      back: () => !!screen.queryByRole("button", { name: "← All groups" }),
+      rows: () => !!$(".grid tbody tr"),
+    });
+    expect(f[0]).toEqual({ toolbar: true, back: true, rows: false });
+    expect(f[f.length - 1]).toEqual({ toolbar: true, back: true, rows: true });
+  });
 
-describe("opening a file shows it at once, with a spinner if it takes a while to read", () => {
+  it("back to the groups: the editor goes at once, then the overview", async () => {
+    backend();
+    await start();
+    fireEvent.click(screen.getByRole("button", { name: fileItem("g.csv") }));
+    const back = await screen.findByRole("button", { name: "← All groups" });
+    const f = await framesOf(back, {
+      editor: () => !!$(".table-editor"),
+      overview: () => heading() === "Profile groups",
+    });
+    expect(f[0]).toEqual({ editor: false, overview: false });
+    expect(f[f.length - 1]).toEqual({ editor: false, overview: true });
+  });
+
+  it("switching to Tasks: the sidebar and file list, then the overview", async () => {
+    backend();
+    await start();
+    const f = await framesOf(nav("Tasks"), {
+      current: () => $('nav [aria-current="page"]')?.textContent === "Tasks",
+      fileList: () => !!screen.queryByRole("button", { name: fileItem("t.csv") }),
+      overview: () => heading() === "Task files",
+    });
+    expect(f[0]).toEqual({ current: true, fileList: true, overview: false });
+    expect(f[f.length - 1]).toEqual({ current: true, fileList: true, overview: true });
+  });
+
+  it("switching to Accounts: the sidebar, then the overview", async () => {
+    backend();
+    await start();
+    const f = await framesOf(nav("Accounts"), {
+      current: () => $('nav [aria-current="page"]')?.textContent === "Accounts",
+      overview: () => heading() === "Account groups",
+    });
+    expect(f[0]).toEqual({ current: true, overview: false });
+    expect(f[f.length - 1]).toEqual({ current: true, overview: true });
+  });
+
+  it("opening a task file: header, tabs and Save, then the counts and builder", async () => {
+    backend();
+    await start();
+    fireEvent.click(nav("Tasks"));
+    const file = await screen.findByRole("button", { name: fileItem("t.csv") });
+    const f = await framesOf(file, {
+      head: () => !!screen.queryByRole("tab", { name: "Tasks" }) && !!screen.queryByRole("button", { name: "Save" }),
+      counts: () => !!screen.queryByRole("table", { name: "Profile Groups" }),
+    });
+    expect(f[0]).toEqual({ head: true, counts: false });
+    expect(f[f.length - 1]).toEqual({ head: true, counts: true });
+  });
+
+  it("the Raw rows tab: toolbar, then the rows", async () => {
+    backend();
+    await start();
+    fireEvent.click(nav("Tasks"));
+    fireEvent.click(await screen.findByRole("button", { name: fileItem("t.csv") }));
+    const raw = await screen.findByRole("tab", { name: "Raw rows" });
+    const f = await framesOf(raw, {
+      toolbar: () => !!$(".table-editor .toolbar"),
+      rows: () => !!$(".grid tbody tr"),
+    });
+    expect(f[0]).toEqual({ toolbar: true, rows: false });
+    expect(f[f.length - 1]).toEqual({ toolbar: true, rows: true });
+  });
+
+  it("opening an account group: header and Import, then the accounts", async () => {
+    backend();
+    await start();
+    fireEvent.click(nav("Accounts"));
+    const file = await screen.findByRole("button", { name: fileItem("a.txt") });
+    const f = await framesOf(file, {
+      head: () => !!screen.queryByRole("button", { name: "Import accounts…" }),
+      table: () => !!screen.queryByRole("table", { name: "Accounts" }),
+    });
+    expect(f[0]).toEqual({ head: true, table: false });
+    expect(f[f.length - 1]).toEqual({ head: true, table: true });
+  });
+
+  it("a quick open never shows the spinner", async () => {
+    backend();
+    await start();
+    const f = await framesOf(screen.getByRole("button", { name: fileItem("g.csv") }), {
+      busy: () => !!busy(),
+      spinner: () => !!spinner(),
+    });
+    expect(f.some((x) => x.busy)).toBe(true);
+    expect(f.some((x) => x.spinner)).toBe(false);
+  });
+});
+
+describe("a file that takes a while to read: its heading at once, a spinner after the delay", () => {
   it("profiles", async () => {
     const release = holdReads("profile");
     backend();
     await openIn("Profiles", "g.csv");
-    expect(await screen.findByText("Loading g…")).toBeTruthy();
     expect(screen.getByRole("heading", { name: "g" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "← All groups" })).toBeTruthy();
+    expect(await screen.findByText("Loading g…")).toBeTruthy();
     expect(spinner()).toBeTruthy();
     release();
     expect(await screen.findByLabelText("Row 1 profileName")).toBeTruthy();
     expect(screen.queryByText("Loading g…")).toBeNull();
-    expect(spinner()).toBeNull();
+    expect(busy()).toBeNull();
   });
 
-  it("tasks (Tasks view)", async () => {
+  it("tasks", async () => {
     const release = holdReads("task");
     backend();
     await openIn("Tasks", "t.csv");
+    expect(screen.getByRole("button", { name: "← All task files" })).toBeTruthy();
     expect(await screen.findByText("Loading t…")).toBeTruthy();
-    expect(spinner()).toBeTruthy();
     release();
+    // Each file reopens on its last view, and an earlier test left this one on Raw rows.
+    fireEvent.click(await screen.findByRole("tab", { name: "Tasks" }));
     expect(await screen.findByRole("table", { name: "Profile Groups" })).toBeTruthy();
     expect(screen.queryByText("Loading t…")).toBeNull();
-  });
-
-  it("tasks (Raw rows)", async () => {
-    backend();
-    await openIn("Tasks", "t.csv");
-    fireEvent.click(await screen.findByRole("tab", { name: "Raw rows" }));
-    expect(await screen.findByLabelText("Row 1 profileGroup")).toBeTruthy();
-    expect(screen.queryByText("Loading t…")).toBeNull();
+    expect(busy()).toBeNull();
   });
 
   it("accounts", async () => {
     const release = holdReads("account");
     backend();
     await openIn("Accounts", "a.txt");
+    expect(screen.getByRole("button", { name: "Import accounts…" })).toBeTruthy();
     expect(await screen.findByText("Loading a…")).toBeTruthy();
-    expect(spinner()).toBeTruthy();
     release();
     expect(await screen.findByRole("table", { name: "Accounts" })).toBeTruthy();
     expect(screen.queryByText("Loading a…")).toBeNull();
+    expect(busy()).toBeNull();
   });
 
   it("proxies", async () => {
@@ -130,25 +267,9 @@ describe("opening a file shows it at once, with a spinner if it takes a while to
     backend();
     await openIn("Proxies", "p.txt");
     expect(await screen.findByText("Loading p…")).toBeTruthy();
-    expect(spinner()).toBeTruthy();
     release();
     expect(await screen.findByRole("textbox", { name: "Proxy list" })).toBeTruthy();
-  });
-
-  it("a file that opens quickly never shows the spinner", async () => {
-    backend();
-    // Every element added to the page while opening, even ones removed again right after.
-    const added: Element[] = [];
-    const watch = new MutationObserver((records) => {
-      for (const r of records) for (const n of r.addedNodes) if (n instanceof Element) added.push(n);
-    });
-    watch.observe(document.body, { childList: true, subtree: true });
-    await openIn("Profiles", "g.csv");
-    expect(await screen.findByLabelText("Row 1 profileName")).toBeTruthy();
-    watch.disconnect();
-    const has = (selector: string) => added.some((el) => el.matches(selector) || el.querySelector(selector));
-    expect(has(".loading-panel")).toBe(true);
-    expect(has(".spinner")).toBe(false);
+    expect(busy()).toBeNull();
   });
 
   it("a file that can't be read shows the error, not a spinner", async () => {
@@ -159,17 +280,17 @@ describe("opening a file shows it at once, with a spinner if it takes a while to
     await openIn("Profiles", "g.csv");
     expect(await screen.findByText("Couldn't read file: Access is denied. (os error 5)")).toBeTruthy();
     expect(spinner()).toBeNull();
+    expect(busy()).toBeNull();
   });
 });
 
-describe("LoadingPanel", () => {
+describe("LoadingNote and LoadingPanel", () => {
   beforeEach(() => vi.useFakeTimers());
   afterEach(() => vi.useRealTimers());
 
-  it("shows the name at once, and the spinner only after the delay (150 ms)", () => {
-    render(<LoadingPanel name="g" />);
-    expect(screen.getByRole("heading", { name: "g" })).toBeTruthy();
-    expect(document.querySelector(".loading-panel")?.getAttribute("aria-busy")).toBe("true");
+  it("the note is empty at first, and shows the spinner after the delay (150 ms)", () => {
+    render(<LoadingNote label="g" />);
+    expect(busy()).toBeTruthy();
     act(() => vi.advanceTimersByTime(SPINNER_DELAY_MS - 1));
     expect(screen.queryByText("Loading g…")).toBeNull();
     expect(spinner()).toBeNull();
@@ -178,23 +299,33 @@ describe("LoadingPanel", () => {
     expect(spinner()).toBeTruthy();
   });
 
-  it("shows a read error at once, and never the spinner", () => {
-    render(<LoadingPanel name="g" error="not found" />);
-    expect(screen.getByText("Couldn't read file: not found")).toBeTruthy();
-    expect(document.querySelector(".loading-panel")?.getAttribute("aria-busy")).toBe("false");
-    act(() => vi.advanceTimersByTime(SPINNER_DELAY_MS * 2));
-    expect(screen.queryByText("Loading g…")).toBeNull();
-    expect(spinner()).toBeNull();
-  });
-
-  it("a panel gone before the delay leaves no timer behind", () => {
-    const { unmount } = render(<LoadingPanel name="g" />);
+  it("a note gone before the delay leaves no timer behind", () => {
+    const { unmount } = render(<LoadingNote label="g" />);
     unmount();
     expect(vi.getTimerCount()).toBe(0);
   });
+
+  it("the panel shows the heading and back button at once", () => {
+    const onBack = vi.fn();
+    render(<LoadingPanel name="g" back={{ label: "← All groups", onClick: onBack }} />);
+    expect(screen.getByRole("heading", { name: "g" })).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "← All groups" }));
+    expect(onBack).toHaveBeenCalledOnce();
+    expect(spinner()).toBeNull();
+    act(() => vi.advanceTimersByTime(SPINNER_DELAY_MS));
+    expect(spinner()).toBeTruthy();
+  });
+
+  it("a read error shows at once, and never the spinner", () => {
+    render(<LoadingPanel name="g" error="not found" />);
+    expect(screen.getByText("Couldn't read file: not found")).toBeTruthy();
+    expect(busy()).toBeNull();
+    act(() => vi.advanceTimersByTime(SPINNER_DELAY_MS * 2));
+    expect(spinner()).toBeNull();
+  });
 });
 
-describe("useFirstPaintDone", () => {
+describe("useFirstPaintDone and AfterFirstPaint", () => {
   it("is false on the first render, then true", () => {
     const seen: boolean[] = [];
     function Probe() {
@@ -206,5 +337,21 @@ describe("useFirstPaintDone", () => {
     expect(seen[0]).toBe(false);
     expect(seen[seen.length - 1]).toBe(true);
     expect(screen.getByText("drawn")).toBeTruthy();
+  });
+
+  it("draws its children only after the first commit", () => {
+    const drawn: boolean[] = [];
+    function Slow() {
+      return <p>slow part</p>;
+    }
+    render(
+      <Profiler id="t" onRender={() => drawn.push(!!screen.queryByText("slow part"))}>
+        <AfterFirstPaint label="x">
+          <Slow />
+        </AfterFirstPaint>
+      </Profiler>,
+    );
+    expect(drawn[0]).toBe(false);
+    expect(drawn[drawn.length - 1]).toBe(true);
   });
 });

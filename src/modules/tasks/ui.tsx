@@ -30,6 +30,18 @@ const tasksText = ({ tasks, unknown }: { tasks: number; unknown: number }) =>
 
 export const entryRows = (e: DocEntry | undefined) => (e ? e.doc.rows.filter(isRecord) : []);
 
+/** The last totals worked out per file version, so the file list and overview don't recount every render. */
+const totalsCache = new WeakMap<object, { ctx: TaskContext; totals: { tasks: number; unknown: number } }>();
+
+/** Total tasks of a file, as totalTasks gives, reused while the file's rows and the task context are unchanged. */
+export function entryTotals(e: DocEntry, ctx: TaskContext) {
+  const hit = totalsCache.get(e.doc);
+  if (hit && hit.ctx === ctx) return hit.totals;
+  const totals = totalTasks(entryRows(e), ctx);
+  totalsCache.set(e.doc, { ctx, totals });
+  return totals;
+}
+
 /** The tasks UI. `addSite` saves a site typed in "Add site…" to the global list. */
 export function makeTaskUI(addSite: (site: string) => void): TableUI<TaskContext> {
   const cells: Record<number, CellType<TaskContext>> = {
@@ -88,7 +100,7 @@ export function makeTaskUI(addSite: (site: string) => void): TableUI<TaskContext
       heading: "Task files",
       stats: [
         { header: "Rows", value: (e) => recordCount(e) },
-        { header: "Tasks", value: (e, ctx) => tasksText(totalTasks(entryRows(e), ctx)) },
+        { header: "Tasks", value: (e, ctx) => tasksText(entryTotals(e, ctx)) },
       ],
       totals: (entries, ctx) => {
         const rows = entries.flatMap(entryRows);

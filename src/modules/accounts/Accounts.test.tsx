@@ -83,7 +83,7 @@ async function openGroup(name: string) {
   await screen.findByRole("heading", { name: "Account groups" });
   fireEvent.click(await within(groupsTable()).findByRole("button", { name }));
   await screen.findByRole("heading", { name });
-  await waitFor(() => expect(document.querySelector(".loading-panel")).toBeNull());
+  await waitFor(() => expect(document.querySelector('[aria-busy="true"]')).toBeNull());
 }
 
 function paste(text: string) {

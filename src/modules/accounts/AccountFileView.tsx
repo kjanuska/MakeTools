@@ -3,7 +3,7 @@
 // restore_backup; both back up the current file first. Nothing else is written.
 import { useCallback, useDeferredValue, useEffect, useState } from "react";
 import { accountsOf, appendLines, hasProxy, oddLines, parseAccounts, planImport, type AccountsDoc } from "../../lib/formats/accounts";
-import { LoadingPanel } from "../../components/LoadingPanel";
+import { LoadingNote } from "../../components/LoadingPanel";
 import { BackupsMenu } from "../../components/table/BackupsMenu";
 import { confirmAction } from "../../lib/dialogs";
 import { formatDateTime } from "../../lib/format";
@@ -29,7 +29,7 @@ const domainLabel = (d: string) => d || "(no domain)";
 
 export function AccountFileView({ file, onBack, onChanged }: Props) {
   const [loadedDoc, setDoc] = useState<AccountsDoc | null>(null);
-  // Drawn in a background render, so a big group opens at once with a spinner.
+  // Drawn in a background render, so the header shows at once and a big group fills in after.
   const doc = useDeferredValue(loadedDoc);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [importing, setImporting] = useState(false);
@@ -146,7 +146,14 @@ export function AccountFileView({ file, onBack, onChanged }: Props) {
       </div>
     );
   }
-  if (!doc) return <LoadingPanel name={displayName(file.name)} />;
+  if (!doc) {
+    return (
+      <div className="accounts-view">
+        {head}
+        <LoadingNote label={displayName(file.name)} />
+      </div>
+    );
+  }
 
   const stats = accountStats(doc);
   const q = query.trim().toLowerCase();

@@ -1,6 +1,7 @@
 import { displayName } from "./lib/table/fileNames";
 import { useEffect, useMemo, useRef, useState } from "react";
 import "./App.css";
+import { AfterFirstPaint } from "./components/LoadingPanel";
 import { ModuleIcon } from "./components/ModuleIcon";
 import { recordCount, TableOverview } from "./components/table/TableOverview";
 import { TaskFileView } from "./modules/tasks/TaskFileView";
@@ -40,7 +41,7 @@ import { ProxyStore } from "./modules/proxies/store";
 import { buildTaskContext, contextKey } from "./modules/tasks/context";
 import { renameSiteEverywhere, siteUsage, usedSites } from "./modules/tasks/sites";
 import { TaskStore } from "./modules/tasks/store";
-import { entryRows, makeTaskUI, totalTasks } from "./modules/tasks/ui";
+import { entryTotals, makeTaskUI } from "./modules/tasks/ui";
 import { ChangesPanel } from "./shell/ChangesPanel";
 import { fileMenuConfigs } from "./shell/fileMenus";
 import { FileList } from "./shell/FileList";
@@ -353,7 +354,7 @@ export default function App() {
       case "tasks": {
         const e = taskStore.get(f.path);
         if (!e) return undefined;
-        const { tasks, unknown } = totalTasks(entryRows(e), taskContext);
+        const { tasks, unknown } = entryTotals(e, taskContext);
         if (!unknown) return shown(tasks, "task", "tasks");
         return {
           value: `${formatCount(tasks)}+?`,
@@ -417,14 +418,16 @@ export default function App() {
         highlightId={highlight}
       />
     ) : (
-      <GroupsOverview
-        files={profileFiles}
-        dir={dir}
-        store={profileStore}
-        onOpen={openFile}
-        onFilesChanged={() => setListVersion((v) => v + 1)}
-        findRequest={findRequest}
-      />
+      <AfterFirstPaint key="profiles" label="profile groups">
+        <GroupsOverview
+          files={profileFiles}
+          dir={dir}
+          store={profileStore}
+          onOpen={openFile}
+          onFilesChanged={() => setListVersion((v) => v + 1)}
+          findRequest={findRequest}
+        />
+      </AfterFirstPaint>
     );
   } else if (mod.id === "tasks") {
     main = selected ? (
@@ -440,15 +443,17 @@ export default function App() {
         highlightId={highlight}
       />
     ) : (
-      <TableOverview
-        files={taskFiles}
-        dir={dir}
-        store={taskStore}
-        ui={taskUI}
-        onOpen={openFile}
-        onFilesChanged={() => setListVersion((v) => v + 1)}
-        findRequest={findRequest}
-      />
+      <AfterFirstPaint key="tasks" label="task files">
+        <TableOverview
+          files={taskFiles}
+          dir={dir}
+          store={taskStore}
+          ui={taskUI}
+          onOpen={openFile}
+          onFilesChanged={() => setListVersion((v) => v + 1)}
+          findRequest={findRequest}
+        />
+      </AfterFirstPaint>
     );
   } else if (mod.id === "accounts") {
     main = selected ? (
@@ -459,12 +464,14 @@ export default function App() {
         onChanged={() => setListVersion((v) => v + 1)}
       />
     ) : (
-      <AccountsOverview
-        files={folders.accounts.files}
-        dir={dir}
-        onOpen={openFile}
-        onFilesChanged={() => setListVersion((v) => v + 1)}
-      />
+      <AfterFirstPaint key="accounts" label="account groups">
+        <AccountsOverview
+          files={folders.accounts.files}
+          dir={dir}
+          onOpen={openFile}
+          onFilesChanged={() => setListVersion((v) => v + 1)}
+        />
+      </AfterFirstPaint>
     );
   } else if (mod.id === "proxies") {
     main = selected ? (
