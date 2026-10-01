@@ -14,7 +14,7 @@ const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one :
 const sorted = (items: Iterable<string>) => [...items].sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
 
 /** Total tasks of some rows; `unknown` counts rows whose count isn't known. */
-function totalTasks(rows: readonly DataRow[], ctx: TaskContext) {
+export function totalTasks(rows: readonly DataRow[], ctx: TaskContext) {
   let tasks = 0;
   let unknown = 0;
   for (const r of rows) {
@@ -28,7 +28,7 @@ function totalTasks(rows: readonly DataRow[], ctx: TaskContext) {
 const tasksText = ({ tasks, unknown }: { tasks: number; unknown: number }) =>
   `${plural(tasks, "task", "tasks")}${unknown ? ` (+${unknown} unknown)` : ""}`;
 
-const entryRows = (e: DocEntry | undefined) => (e ? e.doc.rows.filter(isRecord) : []);
+export const entryRows = (e: DocEntry | undefined) => (e ? e.doc.rows.filter(isRecord) : []);
 
 /** The tasks UI. `addSite` saves a site typed in "Add site…" to the global list. */
 export function makeTaskUI(addSite: (site: string) => void): TableUI<TaskContext> {

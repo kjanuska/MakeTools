@@ -165,7 +165,8 @@ describe("modules and file list", () => {
     const calls = backend();
     render(<App />);
     await screen.findByRole("button", { name: /popmart\.txt/ });
-    expect(screen.getByText("2.0 KB")).toBeTruthy();
+    // The file's count, not its size.
+    expect(screen.queryByText("2.0 KB")).toBeNull();
 
     fireEvent.click(screen.getByRole("button", { name: "Tasks" }));
 
@@ -326,5 +327,97 @@ describe("backups", () => {
 
     expect(await screen.findByText("Restore failed: Access is denied. (os error 5)")).toBeTruthy();
     expect(screen.queryByText(/Restored the backup/)).toBeNull();
+  });
+});
+
+describe("file list counts", () => {
+  const PROFILE_HEADER =
+    "profileName,firstName,lastName,email,address1,address2,city,state,zipcode,country,phoneNumber,ccNumber,ccMonth,ccYear,cvv";
+  const profileRow = (n: number) =>
+    `${n},Jane,Doe,jane${n}@example.com,101 Main St,,Springfield,IL,62701,US,2175550100,4111111111111111,01,28,123`;
+  const TASK_HEADER = "profileGroup,profileName,proxyGroup,accountGroup,input,size,color,site,mode,cartQuantity,delay";
+  const taskRow = (group: string, name: string) => `${group},${name},p,popmart,kw,random,random,kith.com,fast,1,0`;
+  const pathOf = (folder: string, name: string) => entry(folder, name).path;
+
+  const textsFor = (): Record<string, string> => ({
+    [pathOf("account", "popmart.txt")]: "a@x.com:pw\r\nnot an account\r\n\r\nb@x.com:pw:1.2.3.4:80\r\n",
+    [pathOf("account", "empty.txt")]: "",
+    [pathOf("profile", "g.csv")]: [PROFILE_HEADER, profileRow(1), profileRow(2), ""].join("\n"),
+    [pathOf("proxy", "p.txt")]: "1.1.1.1:80\n\n2.2.2.2:80\n3.3.3.3:80:u:p\n",
+    // ALL in g (2 profiles) + one named profile = 3 tasks.
+    [pathOf("task", "303.csv")]: [TASK_HEADER, taskRow("g", "ALL"), taskRow("g", "1"), ""].join("\n"),
+    // ALL of a group that doesn't exist: its count isn't known.
+    [pathOf("task", "odd.csv")]: [TASK_HEADER, taskRow("g", "2"), taskRow("missing", "ALL"), ""].join("\n"),
+  });
+
+  function countsBackend(texts = textsFor()) {
+    const files: Record<string, FileEntry[]> = {
+      account: [entry("account", "popmart.txt", 2048), entry("account", "empty.txt", 0)],
+      profile: [entry("profile", "g.csv")],
+      proxy: [entry("proxy", "p.txt")],
+      task: [entry("task", "303.csv"), entry("task", "odd.csv")],
+    };
+    const calls = backend({
+      list_files: ({ dir }) => files[(dir as string).slice(ROOT.length + 1)] ?? [],
+      read_text: ({ path }): TextFile => ({ text: texts[path as string], lineEnding: "lf", hasBom: false }),
+    });
+    return { calls, files, texts };
+  }
+
+  const countOf = async (name: RegExp, value: string) => {
+    const button = await screen.findByRole("button", { name });
+    await waitFor(() => expect(button.querySelector(".file-count")?.textContent).toBe(value));
+    return button.querySelector(".file-count")!;
+  };
+
+  it("shows accounts per account file, not the size", async () => {
+    countsBackend();
+    render(<App />);
+    expect((await countOf(/popmart\.txt/, "2")).getAttribute("title")).toBe("2 accounts");
+    expect((await countOf(/empty\.txt/, "0")).getAttribute("title")).toBe("0 accounts");
+    expect(screen.queryByText("2.0 KB")).toBeNull();
+  });
+
+  it("shows profiles per group", async () => {
+    countsBackend();
+    render(<App />);
+    fireEvent.click(await screen.findByRole("button", { name: "Profiles" }));
+    expect((await countOf(/g\.csv/, "2")).getAttribute("title")).toBe("2 profiles");
+  });
+
+  it("shows proxies per file, not counting blank lines, read once the module is shown", async () => {
+    const { calls } = countsBackend();
+    render(<App />);
+    await countOf(/popmart\.txt/, "2");
+    expect(callsOf(calls, "read_text")).not.toContainEqual({ path: pathOf("proxy", "p.txt") });
+    fireEvent.click(screen.getByRole("button", { name: "Proxies" }));
+    expect((await countOf(/p\.txt/, "3")).getAttribute("title")).toBe("3 proxies");
+  });
+
+  it("shows tasks per task file, with ALL counted as the group's profiles", async () => {
+    countsBackend();
+    render(<App />);
+    fireEvent.click(await screen.findByRole("button", { name: "Tasks" }));
+    expect((await countOf(/303\.csv/, "3")).getAttribute("title")).toBe("3 tasks");
+    expect((await countOf(/odd\.csv/, "1+?")).getAttribute("title")).toBe("1 task (+1 row with an unknown count)");
+  });
+
+  it("formats large counts with separators", async () => {
+    const texts = textsFor();
+    texts[pathOf("proxy", "p.txt")] = Array.from({ length: 1234 }, (_, i) => `${i}.0.0.1:80`).join("\n");
+    countsBackend(texts);
+    render(<App />);
+    fireEvent.click(await screen.findByRole("button", { name: "Proxies" }));
+    expect((await countOf(/p\.txt/, "1,234")).getAttribute("title")).toBe("1,234 proxies");
+  });
+
+  it("counts an account file again after it changes on disk", async () => {
+    const { files, texts } = countsBackend();
+    render(<App />);
+    await countOf(/popmart\.txt/, "2");
+    texts[pathOf("account", "popmart.txt")] += "c@x.com:pw\r\n";
+    files.account = [{ ...files.account[0], modifiedMs: 2 }, files.account[1]];
+    fireEvent.click(screen.getByRole("button", { name: "Refresh" }));
+    await countOf(/popmart\.txt/, "3");
   });
 });

@@ -1,9 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import "./App.css";
 import { ModuleIcon } from "./components/ModuleIcon";
-import { TableOverview } from "./components/table/TableOverview";
+import { recordCount, TableOverview } from "./components/table/TableOverview";
 import { TaskFileView } from "./modules/tasks/TaskFileView";
 import { askSaveDiscardCancel, confirmAction, pickFolder, showMessage } from "./lib/dialogs";
+import { accountsOf, parseAccounts } from "./lib/formats/accounts";
+import { countProxies, parseProxies } from "./lib/formats/proxies";
 import type { FileEntry } from "./lib/fs";
 import { MODULES, type ModuleId } from "./lib/modules";
 import { joinPath } from "./lib/paths";
@@ -37,17 +39,22 @@ import { ProxyStore } from "./modules/proxies/store";
 import { buildTaskContext, contextKey } from "./modules/tasks/context";
 import { renameSiteEverywhere, siteUsage, usedSites } from "./modules/tasks/sites";
 import { TaskStore } from "./modules/tasks/store";
-import { makeTaskUI } from "./modules/tasks/ui";
+import { entryRows, makeTaskUI, totalTasks } from "./modules/tasks/ui";
 import { ChangesPanel } from "./shell/ChangesPanel";
 import { fileMenuConfigs } from "./shell/fileMenus";
 import { FileList } from "./shell/FileList";
 import { FilePanel } from "./shell/FilePanel";
 import { SettingsPage } from "./shell/SettingsPage";
 import { SitesSettings } from "./shell/SitesSettings";
-import { useFileMenu } from "./shell/useFileMenu";
+import { useDiskCounts, useTextCounter, type FileCount } from "./shell/useFileCounts";
+import { plural, useFileMenu } from "./shell/useFileMenu";
 import { useFolders } from "./shell/useFolders";
 
 const folderOf = (id: ModuleId) => MODULES.find((m) => m.id === id)!.folder;
+
+const countAccountText = (text: string) => accountsOf(parseAccounts(text)).length;
+const countProxyText = (text: string) => countProxies(parseProxies(text));
+const formatCount = (n: number) => n.toLocaleString("en-US");
 
 export default function App() {
   // undefined while the saved setting is loading
@@ -76,6 +83,10 @@ export default function App() {
   useStoreVersion(taskStore);
   useStoreVersion(proxyStore);
   const folders = useFolders(root, listVersion);
+  // Counts in the file list. Proxy and account files are read once their module is shown.
+  const accountCounts = useDiskCounts(folders.accounts.files, countAccountText, moduleId === "accounts");
+  const proxyDiskCounts = useDiskCounts(folders.proxies.files, countProxyText, moduleId === "proxies");
+  const countProxyEntry = useTextCounter(countProxyText);
 
   const stores: Partial<Record<ModuleId, TableStore<never>>> = {
     profiles: profileStore as unknown as TableStore<never>,
@@ -328,6 +339,35 @@ export default function App() {
   const dir = joinPath(root, mod.folder);
   const list = folders[mod.id];
   const store = stores[mod.id];
+
+  /** How many records a file has, including unsaved changes. */
+  function fileCount(f: FileEntry): FileCount | undefined {
+    const shown = (n: number | undefined, one: string, many: string) =>
+      n === undefined ? undefined : { value: formatCount(n), title: plural(n, one, many) };
+    switch (mod.id) {
+      case "profiles": {
+        const e = profileStore.get(f.path);
+        return e && shown(recordCount(e), "profile", "profiles");
+      }
+      case "tasks": {
+        const e = taskStore.get(f.path);
+        if (!e) return undefined;
+        const { tasks, unknown } = totalTasks(entryRows(e), taskContext);
+        if (!unknown) return shown(tasks, "task", "tasks");
+        return {
+          value: `${formatCount(tasks)}+?`,
+          title: `${plural(tasks, "task", "tasks")} (+${plural(unknown, "row", "rows")} with an unknown count)`,
+        };
+      }
+      case "proxies": {
+        const e = proxyStore.get(f.path);
+        return shown(e ? countProxyEntry(f.path, e.text) : proxyDiskCounts.get(f.path), "proxy", "proxies");
+      }
+      case "accounts":
+        return shown(accountCounts.get(f.path), "account", "accounts");
+    }
+  }
+
   const changed = [
     ...(["profiles", "tasks"] as const).flatMap((m) =>
       stores[m]!.dirtyEntries().map((e) => ({
@@ -489,6 +529,7 @@ export default function App() {
         onRefresh={() => setListVersion((v) => v + 1)}
         menuFor={fileMenu.menuFor}
         renaming={fileMenu.renaming}
+        count={fileCount}
         marker={
           mod.id === "proxies"
             ? (f) => (proxyStore.get(f.path)?.dirty ? { modified: true } : undefined)

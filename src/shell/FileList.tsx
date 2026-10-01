@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { ContextMenu, type MenuItem } from "../components/ContextMenu";
-import { formatSize } from "../lib/format";
 import type { FileEntry } from "../lib/fs";
+import type { FileCount } from "./useFileCounts";
 
 interface Props {
   dir: string;
@@ -18,6 +18,8 @@ interface Props {
   menuFor?: (file: FileEntry) => { items: MenuItem[]; note?: string };
   /** A file being renamed in place. */
   renaming?: Renaming | null;
+  /** How many records (profiles, tasks, proxies, accounts) a file has; blank while unknown. */
+  count?: (file: FileEntry) => FileCount | undefined;
 }
 
 export interface Renaming {
@@ -38,7 +40,7 @@ export interface FileMarker {
 }
 
 export function FileList(props: Props) {
-  const { dir, extension, files, error, selectedPath, onSelect, onRefresh, marker, menuFor, renaming } = props;
+  const { dir, extension, files, error, selectedPath, onSelect, onRefresh, marker, menuFor, renaming, count } = props;
   const [menu, setMenu] = useState<{ file: FileEntry; x: number; y: number } | null>(null);
   const menuContent = menu && menuFor?.(menu.file);
 
@@ -73,6 +75,7 @@ export function FileList(props: Props) {
         <ul>
           {files.map((f) => {
             const m = marker?.(f);
+            const c = count?.(f);
             const notes = [m?.modified && "unsaved changes", m?.invalid && "has errors"].filter(Boolean).join(", ");
             return (
               <li key={f.path}>
@@ -91,7 +94,11 @@ export function FileList(props: Props) {
                     {f.name}
                     {m?.modified && <span className="modified-dot"> ●</span>}
                   </span>
-                  <span className="muted">{formatSize(f.size)}</span>
+                  {c && (
+                    <span className="muted file-count" title={c.title}>
+                      {c.value}
+                    </span>
+                  )}
                 </button>
                 )}
               </li>
