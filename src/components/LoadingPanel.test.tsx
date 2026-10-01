@@ -1,6 +1,6 @@
 import { mockIPC } from "@tauri-apps/api/mocks";
-import { fireEvent, render, screen } from "@testing-library/react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { act, fireEvent, render, screen } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import App from "../App";
 import { PROFILE_HEADER } from "../lib/formats/profiles";
 import { TASK_HEADER } from "../lib/formats/tasks";
@@ -8,7 +8,7 @@ import type { FileEntry } from "../lib/fs";
 import { getMakebotPath } from "../lib/settings";
 import { guardWindowClose } from "../lib/window";
 import { fileItem } from "../test/fileList";
-import { LoadingPanel, useFirstPaintDone } from "./LoadingPanel";
+import { LoadingPanel, SPINNER_DELAY_MS, useFirstPaintDone } from "./LoadingPanel";
 
 vi.mock("../lib/settings", () => ({
   getMakebotPath: vi.fn(),
@@ -81,7 +81,7 @@ async function openIn(module: string, file: string) {
 
 const spinner = () => document.querySelector(".file-panel .loading .spinner");
 
-describe("opening a file shows it at once, with a spinner until it's read", () => {
+describe("opening a file shows it at once, with a spinner if it takes a while to read", () => {
   it("profiles", async () => {
     const release = holdReads("profile");
     backend();
@@ -135,6 +135,22 @@ describe("opening a file shows it at once, with a spinner until it's read", () =
     expect(await screen.findByRole("textbox", { name: "Proxy list" })).toBeTruthy();
   });
 
+  it("a file that opens quickly never shows the spinner", async () => {
+    backend();
+    // Every element added to the page while opening, even ones removed again right after.
+    const added: Element[] = [];
+    const watch = new MutationObserver((records) => {
+      for (const r of records) for (const n of r.addedNodes) if (n instanceof Element) added.push(n);
+    });
+    watch.observe(document.body, { childList: true, subtree: true });
+    await openIn("Profiles", "g.csv");
+    expect(await screen.findByLabelText("Row 1 profileName")).toBeTruthy();
+    watch.disconnect();
+    const has = (selector: string) => added.some((el) => el.matches(selector) || el.querySelector(selector));
+    expect(has(".loading-panel")).toBe(true);
+    expect(has(".spinner")).toBe(false);
+  });
+
   it("a file that can't be read shows the error, not a spinner", async () => {
     backend((p) => {
       if (p.endsWith("g.csv")) throw "Access is denied. (os error 5)";
@@ -147,18 +163,34 @@ describe("opening a file shows it at once, with a spinner until it's read", () =
 });
 
 describe("LoadingPanel", () => {
-  it("shows the name and a spinner", () => {
+  beforeEach(() => vi.useFakeTimers());
+  afterEach(() => vi.useRealTimers());
+
+  it("shows the name at once, and the spinner only after the delay (150 ms)", () => {
     render(<LoadingPanel name="g" />);
     expect(screen.getByRole("heading", { name: "g" })).toBeTruthy();
+    expect(document.querySelector(".loading-panel")?.getAttribute("aria-busy")).toBe("true");
+    act(() => vi.advanceTimersByTime(SPINNER_DELAY_MS - 1));
+    expect(screen.queryByText("Loading g…")).toBeNull();
+    expect(spinner()).toBeNull();
+    act(() => vi.advanceTimersByTime(1));
     expect(screen.getByText("Loading g…")).toBeTruthy();
     expect(spinner()).toBeTruthy();
   });
 
-  it("shows a read error instead of the spinner", () => {
+  it("shows a read error at once, and never the spinner", () => {
     render(<LoadingPanel name="g" error="not found" />);
     expect(screen.getByText("Couldn't read file: not found")).toBeTruthy();
+    expect(document.querySelector(".loading-panel")?.getAttribute("aria-busy")).toBe("false");
+    act(() => vi.advanceTimersByTime(SPINNER_DELAY_MS * 2));
     expect(screen.queryByText("Loading g…")).toBeNull();
     expect(spinner()).toBeNull();
+  });
+
+  it("a panel gone before the delay leaves no timer behind", () => {
+    const { unmount } = render(<LoadingPanel name="g" />);
+    unmount();
+    expect(vi.getTimerCount()).toBe(0);
   });
 });
 

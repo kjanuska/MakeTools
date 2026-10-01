@@ -1,6 +1,9 @@
 // What a file view shows until its file is ready: the name with a spinner,
 // or the read error. Shared by every module's file view.
-import { useDeferredValue } from "react";
+import { useDeferredValue, useEffect, useState } from "react";
+
+/** The spinner only shows if loading takes longer than this, so quick opens don't flash it. */
+export const SPINNER_DELAY_MS = 150;
 
 interface Props {
   /** The file's name as shown in its heading. */
@@ -10,15 +13,22 @@ interface Props {
 }
 
 export function LoadingPanel({ name, error }: Props) {
+  const [slow, setSlow] = useState(false);
+  useEffect(() => {
+    const t = setTimeout(() => setSlow(true), SPINNER_DELAY_MS);
+    return () => clearTimeout(t);
+  }, []);
   return (
-    <div className="file-panel">
+    <div className="file-panel loading-panel" aria-busy={!error}>
       <h2>{name}</h2>
       {error ? (
         <p className="error">Couldn't read file: {error}</p>
       ) : (
-        <p className="loading" aria-live="polite">
-          <span className="spinner" aria-hidden="true" /> Loading {name}…
-        </p>
+        slow && (
+          <p className="loading" aria-live="polite">
+            <span className="spinner" aria-hidden="true" /> Loading {name}…
+          </p>
+        )
       )}
     </div>
   );
