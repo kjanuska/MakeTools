@@ -114,7 +114,8 @@ describe("profiles grid", () => {
     backend({ "g.csv": GOOD });
     await open();
     expect(screen.getByText(/3 profiles/)).toBeTruthy();
-    expect(screen.getByText(/CRLF/)).toBeTruthy();
+    // Line endings are kept but not shown.
+    expect(screen.queryByText(/CRLF/)).toBeNull();
     expect(cell(2, "city").value).toBe("Chicago");
     expect(cell(3, "profileName").value).toBe("3");
     expect(status()).toContain("No errors");

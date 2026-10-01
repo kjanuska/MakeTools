@@ -225,19 +225,21 @@ describe("file panel", () => {
     const calls = backend();
     render(<FilePanel file={ACCOUNT_FILE} onChanged={() => {}} />);
 
-    expect(await screen.findByText("CRLF")).toBeTruthy();
-    expect(screen.getByText("22 B")).toBeTruthy();
+    expect(await screen.findByText("22 B")).toBeTruthy();
+    // Line endings are an underlying detail and are not shown.
+    expect(screen.queryByText("Line endings")).toBeNull();
+    expect(screen.queryByText("CRLF")).toBeNull();
     expect(screen.getByText("No")).toBeTruthy();
     expect(screen.queryByText(/secret-password/)).toBeNull();
     // The file is read once.
     expect(callsOf(calls, "read_text").filter((a) => a.path === ACCOUNT_FILE.path)).toEqual([{ path: ACCOUNT_FILE.path }]);
   });
 
-  it("shows BOM and mixed line endings", async () => {
+  it("shows a BOM", async () => {
     backend({ read_text: () => ({ text: "\uFEFFa\r\nb\n", lineEnding: "mixed", hasBom: true }) });
     render(<FilePanel file={ACCOUNT_FILE} onChanged={() => {}} />);
-    expect(await screen.findByText("Mixed (CRLF and LF)")).toBeTruthy();
-    expect(screen.getByText("Yes")).toBeTruthy();
+    expect(await screen.findByText("Yes")).toBeTruthy();
+    expect(screen.queryByText(/Mixed/)).toBeNull();
   });
 
   it("shows read errors", async () => {

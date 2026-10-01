@@ -1,6 +1,6 @@
 import { displayName } from "../lib/table/fileNames";
 import { useCallback, useEffect, useState } from "react";
-import { LINE_ENDING_LABELS, formatSize, utf8Length } from "../lib/format";
+import { formatSize, utf8Length } from "../lib/format";
 import { readText, type FileEntry, type TextFile } from "../lib/fs";
 import { BackupsPanel } from "./BackupsPanel";
 
@@ -36,8 +36,6 @@ export function FilePanel({ file, onChanged }: Props) {
         <dl className="file-info">
           <dt>Size</dt>
           <dd>{formatSize(utf8Length(info.text))}</dd>
-          <dt>Line endings</dt>
-          <dd>{LINE_ENDING_LABELS[info.lineEnding]}</dd>
           <dt>BOM</dt>
           <dd>{info.hasBom ? "Yes" : "No"}</dd>
         </dl>

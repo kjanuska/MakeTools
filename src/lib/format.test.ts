@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { LINE_ENDING_LABELS, formatDateTime, formatSize, utf8Length } from "./format";
+import { formatDateTime, formatSize, utf8Length } from "./format";
 
 describe("formatSize", () => {
   it("formats bytes, KB and MB", () => {
@@ -31,11 +31,5 @@ describe("utf8Length", () => {
     expect(utf8Length("ä")).toBe(2);
     expect(utf8Length("\uFEFF")).toBe(3);
     expect(utf8Length("a\r\n")).toBe(3);
-  });
-});
-
-describe("LINE_ENDING_LABELS", () => {
-  it("has a label for every line ending", () => {
-    expect(Object.keys(LINE_ENDING_LABELS).sort()).toEqual(["crlf", "lf", "mixed", "none"]);
   });
 });

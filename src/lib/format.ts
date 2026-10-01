@@ -1,5 +1,3 @@
-import type { LineEnding } from "./fs";
-
 export function formatSize(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
@@ -16,13 +14,6 @@ export function formatDateTime(ms: number): string {
     `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`
   );
 }
-
-export const LINE_ENDING_LABELS: Record<LineEnding, string> = {
-  none: "None (single line)",
-  lf: "LF",
-  crlf: "CRLF",
-  mixed: "Mixed (CRLF and LF)",
-};
 
 /** Size of `text` in bytes when encoded as UTF-8. */
 export function utf8Length(text: string): number {

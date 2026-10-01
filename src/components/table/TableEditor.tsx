@@ -1,6 +1,5 @@
 import { displayName } from "../../lib/table/fileNames";
 import { memo, useCallback, useEffect, useRef, useState, type KeyboardEvent, type MouseEvent } from "react";
-import { LINE_ENDING_LABELS } from "../../lib/format";
 import { headerOf, type DataRow, type Row } from "../../lib/formats/csvTable";
 import type { BackupEntry, FileEntry } from "../../lib/fs";
 import { useShortcutsRef, type ActionId } from "../../lib/shortcuts";
@@ -273,8 +272,6 @@ export function TableEditor<Ctx>({ file, store, ui, confirmOverwrite, onSaved, f
         <span className="muted">
           {ui.summary(records, ctx)}
           {rawCount > 0 && ` · ${rawCount} unparseable ${rawCount === 1 ? "line" : "lines"} (kept unchanged)`}
-          {" · "}
-          {LINE_ENDING_LABELS[loaded.lineEnding]}
           {loaded.hasBom && " · BOM"}
         </span>
         <span className="spacer" />
