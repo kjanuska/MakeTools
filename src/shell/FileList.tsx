@@ -9,6 +9,8 @@ interface Props {
   /** Null while loading or if the folder couldn't be listed. */
   files: FileEntry[] | null;
   error: string | null;
+  /** Column headers above the files. */
+  columns: { name: string; count: string };
   selectedPath: string | null;
   onSelect: (file: FileEntry) => void;
   onRefresh: () => void;
@@ -40,7 +42,7 @@ export interface FileMarker {
 }
 
 export function FileList(props: Props) {
-  const { dir, files, error, selectedPath, onSelect, onRefresh, marker, menuFor, renaming, count } = props;
+  const { dir, files, error, columns, selectedPath, onSelect, onRefresh, marker, menuFor, renaming, count } = props;
   const [menu, setMenu] = useState<{ file: FileEntry; x: number; y: number } | null>(null);
   const menuContent = menu && menuFor?.(menu.file);
 
@@ -70,39 +72,45 @@ export function FileList(props: Props) {
       )}
       {files && files.length === 0 && <p className="muted">No files.</p>}
       {files && files.length > 0 && (
-        <ul>
-          {files.map((f) => {
-            const m = marker?.(f);
-            const c = count?.(f);
-            const notes = [m?.modified && "unsaved changes", m?.invalid && "has errors"].filter(Boolean).join(", ");
-            return (
-              <li key={f.path}>
-                {renaming?.path === f.path ? (
-                  <RenameBox renaming={renaming} />
-                ) : (
-                <button
-                  className={`file-item${m?.invalid ? " invalid" : ""}`}
-                  aria-current={f.path === selectedPath ? "true" : undefined}
-                  aria-description={notes || undefined}
-                  title={notes || undefined}
-                  onClick={() => onSelect(f)}
-                  onContextMenu={(e) => openMenu(e, f)}
-                >
-                  <span>
-                    {displayName(f.name)}
-                    {m?.modified && <span className="modified-dot"> ●</span>}
-                  </span>
-                  {c && (
-                    <span className="muted file-count" title={c.title}>
-                      {c.value}
+        <>
+          <div className="file-list-columns">
+            <span>{columns.name}</span>
+            <span>{columns.count}</span>
+          </div>
+          <ul>
+            {files.map((f) => {
+              const m = marker?.(f);
+              const c = count?.(f);
+              const notes = [m?.modified && "unsaved changes", m?.invalid && "has errors"].filter(Boolean).join(", ");
+              return (
+                <li key={f.path}>
+                  {renaming?.path === f.path ? (
+                    <RenameBox renaming={renaming} />
+                  ) : (
+                  <button
+                    className={`file-item${m?.invalid ? " invalid" : ""}`}
+                    aria-current={f.path === selectedPath ? "true" : undefined}
+                    aria-description={notes || undefined}
+                    title={notes || undefined}
+                    onClick={() => onSelect(f)}
+                    onContextMenu={(e) => openMenu(e, f)}
+                  >
+                    <span>
+                      {displayName(f.name)}
+                      {m?.modified && <span className="modified-dot"> ●</span>}
                     </span>
+                    {c && (
+                      <span className="muted file-count" title={c.title}>
+                        {c.value}
+                      </span>
+                    )}
+                  </button>
                   )}
-                </button>
-                )}
-              </li>
-            );
-          })}
-        </ul>
+                </li>
+              );
+            })}
+          </ul>
+        </>
       )}
       {menu && menuContent && (
         <ContextMenu

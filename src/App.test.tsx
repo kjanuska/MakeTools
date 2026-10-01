@@ -373,6 +373,34 @@ describe("file list counts", () => {
     return button.querySelector(".file-count")!;
   };
 
+  it("has column headers naming each module's files and counts", async () => {
+    countsBackend();
+    render(<App />);
+    const headers = async () => {
+      const row = await waitFor(() => screen.getByRole("region", { name: "Files" }).querySelector(".file-list-columns")!);
+      return [...row.querySelectorAll("span")].map((s) => s.textContent);
+    };
+    await screen.findByRole("button", { name: fileItem("popmart") });
+    expect(await headers()).toEqual(["Account group", "Number of accounts"]);
+    for (const [module, file, cols] of [
+      ["Profiles", "g", ["Profile group", "Number of profiles"]],
+      ["Proxies", "p", ["Proxy group", "Number of proxies"]],
+      ["Tasks", "303", ["Task file", "Number of tasks"]],
+    ] as const) {
+      fireEvent.click(screen.getByRole("button", { name: module }));
+      await screen.findByRole("button", { name: fileItem(file) });
+      expect(await headers()).toEqual(cols);
+    }
+  });
+
+  it("has no column headers when the folder is empty", async () => {
+    backend();
+    render(<App />);
+    fireEvent.click(await screen.findByRole("button", { name: "Profiles" }));
+    expect(await screen.findByText("No files.")).toBeTruthy();
+    expect(screen.queryByText("Profile group")).toBeNull();
+  });
+
   it("shows accounts per account file, not the size", async () => {
     countsBackend();
     render(<App />);

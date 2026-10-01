@@ -523,6 +523,7 @@ export default function App() {
       <FileList
         dir={dir}
         files={list.files}
+        columns={mod.columns}
         error={list.error}
         selectedPath={selected?.path ?? null}
         onSelect={(f) => openFile(f)}
