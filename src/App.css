@@ -229,6 +229,13 @@ button[aria-pressed="true"] {
   margin: 8px 0;
 }
 
+/* Sits under the status line; scrolls on its own so a long list doesn't push the grid away. */
+.error-list {
+  max-height: 9em;
+  overflow-y: auto;
+  margin: -4px 0 8px;
+}
+
 .unsaved {
   color: var(--accent);
 }

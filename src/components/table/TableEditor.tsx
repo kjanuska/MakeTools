@@ -338,6 +338,7 @@ export function TableEditor<Ctx>({ file, store, ui, confirmOverwrite, onSaved, f
             {dirty && <span className="unsaved"> · Unsaved changes</span>}
             {status && <span className="status"> · {status}</span>}
           </p>
+          {errorCount > 0 && <ErrorList fields={fields} rows={doc.rows} errors={errors} />}
 
           {adding && addType?.kind === "select" && addType.add && (
             <AddOptionPanel prompt={addType.add.prompt} onAdd={finishAdd} onCancel={() => setAdding(null)} />
@@ -445,8 +446,6 @@ export function TableEditor<Ctx>({ file, store, ui, confirmOverwrite, onSaved, f
         </table>
         {doc.rows.length === 0 && <p className="muted">This {fileLabel} is empty.</p>}
       </div>
-
-      {!readOnly && errorCount > 0 && <ErrorList fields={fields} rows={doc.rows} errors={errors} />}
     </div>
   );
 }
@@ -573,7 +572,6 @@ function ErrorList({ fields, rows, errors }: { fields: readonly string[]; rows: 
   });
   return (
     <section className="error-list" aria-label="Errors">
-      <h3>Errors</h3>
       <ul>
         {list.slice(0, MAX_LISTED_ERRORS).map((t) => (
           <li key={t}>{t}</li>

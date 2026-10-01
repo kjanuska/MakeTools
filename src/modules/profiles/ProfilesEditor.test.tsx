@@ -251,7 +251,11 @@ describe("editing and saving", () => {
     expect(cell(1, "zipcode").getAttribute("aria-invalid")).toBe("true");
     expect(cell(1, "zipcode").parentElement!.className).toContain("invalid");
     expect(status()).toContain("1 error: fix it to save");
-    expect(within(screen.getByRole("region", { name: "Errors" })).getByText("Row 1: zipcode must be exactly 5 digits")).toBeTruthy();
+    const list = screen.getByRole("region", { name: "Errors" });
+    expect(within(list).getByText("Row 1: zipcode must be exactly 5 digits")).toBeTruthy();
+    // Listed at the top, right under the "1 error" line, not below the grid.
+    expect(list.previousElementSibling).toBe(screen.getByRole("status"));
+    expect(list.compareDocumentPosition(screen.getByRole("table")) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(button("Save").disabled).toBe(true);
     type(1, "zipcode", "62702");
     expect(button("Save").disabled).toBe(false);
