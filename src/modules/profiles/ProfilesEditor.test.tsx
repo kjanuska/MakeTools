@@ -634,7 +634,7 @@ describe("closing with unsaved changes", () => {
     await editTwoFiles();
     vi.mocked(pickFolder).mockResolvedValue("D:\\Other");
     vi.mocked(askSaveDiscardCancel).mockResolvedValueOnce("cancel");
-    fireEvent.click(button("⚙ Settings"));
+    fireEvent.click(button("Settings"));
     fireEvent.click(button("Change folder…"));
     await waitFor(() => expect(askSaveDiscardCancel).toHaveBeenCalledWith(expect.stringContaining("before switching folders"), "Unsaved changes"));
     expect(setMakebotPath).not.toHaveBeenCalled();

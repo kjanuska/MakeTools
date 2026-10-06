@@ -296,7 +296,7 @@ describe("sites", () => {
       "b.csv": taskFile([task()]),
     });
     await openTasks();
-    fireEvent.click(btn("⚙ Settings"));
+    fireEvent.click(btn("Settings"));
     const sites = screen.getByRole("region", { name: "Sites" });
     await waitFor(() => expect(within(sites).getByText("2 tasks in 2 files")).toBeTruthy());
     fireEvent.click(within(sites).getByRole("button", { name: "Rename kith.com" }));
@@ -313,14 +313,14 @@ describe("sites", () => {
     const { disk } = backend({ "a.csv": taskFile([task()]) });
     await openTaskFile("a.csv");
     type(1, "delay", "4500");
-    fireEvent.click(btn("⚙ Settings"));
+    fireEvent.click(btn("Settings"));
     const sites = screen.getByRole("region", { name: "Sites" });
     fireEvent.click(within(sites).getByRole("button", { name: "Rename kith.com" }));
     fireEvent.change(within(sites).getByLabelText("New name for kith.com"), { target: { value: "eu.kith.com" } });
     fireEvent.click(within(sites).getByRole("button", { name: "Save" }));
     await waitFor(() => expect(within(sites).getByText(/Not saved yet: a \(it has other unsaved changes\)/)).toBeTruthy());
     expect(disk.get(`${ROOT}\\task\\a.csv`)).toBe(taskFile([task()]));
-    fireEvent.click(btn("⚙ Settings"));
+    fireEvent.click(btn("Tasks"));
     await screen.findByLabelText("Row 1 site");
     expect(cell(1, "site").value).toBe("eu.kith.com");
     expect(cell(1, "delay").value).toBe("4500");
@@ -330,7 +330,7 @@ describe("sites", () => {
     const { disk } = backend({ "a.csv": taskFile([task()]) });
     await openTasks();
     vi.mocked(confirmAction).mockResolvedValueOnce(false);
-    fireEvent.click(btn("⚙ Settings"));
+    fireEvent.click(btn("Settings"));
     const sites = screen.getByRole("region", { name: "Sites" });
     fireEvent.click(within(sites).getByRole("button", { name: "Rename kith.com" }));
     fireEvent.change(within(sites).getByLabelText("New name for kith.com"), { target: { value: "x.com" } });
@@ -343,13 +343,13 @@ describe("sites", () => {
   it("removing a site that tasks use makes them show an error", async () => {
     backend({ "a.csv": taskFile([task()]) });
     await openTasks();
-    fireEvent.click(btn("⚙ Settings"));
+    fireEvent.click(btn("Settings"));
     const sites = screen.getByRole("region", { name: "Sites" });
     await waitFor(() => expect(within(sites).getByText("1 task in 1 file")).toBeTruthy());
     fireEvent.click(within(sites).getByRole("button", { name: "Remove kith.com" }));
     await waitFor(() => expect(setSites).toHaveBeenLastCalledWith(["shop.topps.com"]));
     expect(confirmAction).toHaveBeenCalledWith(expect.stringContaining("1 task in 1 file still use it"), "Remove site");
-    fireEvent.click(btn("⚙ Settings"));
+    fireEvent.click(btn("Tasks"));
     fireEvent.click(await screen.findByRole("button", { name: fileItem("a") }));
     await screen.findByLabelText("Row 1 site");
     await waitFor(() => expect(cell(1, "site").title).toBe("site isn't in the site list"));

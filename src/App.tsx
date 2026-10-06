@@ -303,6 +303,11 @@ export default function App() {
 
   function selectModule(id: ModuleId) {
     fileMenu.cancelRename();
+    // From Settings, the module that was open comes back as it was (its file stays open).
+    if (settingsOpen && id === moduleId) {
+      setSettingsOpen(false);
+      return;
+    }
     setSettingsOpen(false);
     setModuleId(id);
     setSelected(null);
@@ -398,7 +403,6 @@ export default function App() {
         onChangeFolder={chooseFolder}
         bindings={bindings}
         onChangeBindings={changeBindings}
-        onClose={() => setSettingsOpen(false)}
         top={
           <UpdateSettings
             version={updater.version}
@@ -505,15 +509,12 @@ export default function App() {
   }
 
   return (
-    <div className="app">
+    <div className={settingsOpen ? "app settings-open" : "app"}>
       <header className="topbar">
         <strong>Make Tools</strong>
         <span className="topbar-spacer" />
         {error && <span className="error">{error}</span>}
         {updater.status.kind === "downloading" && <span className="status">{updateStatusText(updater.status)}</span>}
-        <button aria-pressed={settingsOpen} onClick={() => setSettingsOpen((o) => !o)}>
-          ⚙ Settings
-        </button>
       </header>
       <aside className="sidebar">
         <nav aria-label="Modules">
@@ -521,13 +522,24 @@ export default function App() {
             <button
               key={m.id}
               className="nav-item"
-              aria-current={m.id === mod.id ? "page" : undefined}
+              aria-current={!settingsOpen && m.id === mod.id ? "page" : undefined}
               onClick={() => selectModule(m.id)}
             >
               <ModuleIcon id={m.id} />
               <span>{m.label}</span>
             </button>
           ))}
+          <button
+            className="nav-item"
+            aria-current={settingsOpen ? "page" : undefined}
+            onClick={() => {
+              fileMenu.cancelRename();
+              setSettingsOpen(true);
+            }}
+          >
+            <ModuleIcon id="settings" />
+            <span>Settings</span>
+          </button>
         </nav>
         <ChangesPanel
           files={changed}
@@ -537,6 +549,7 @@ export default function App() {
           message={changesMessage}
         />
       </aside>
+      {!settingsOpen && (
       <FileList
         dir={dir}
         files={list.files}
@@ -560,6 +573,7 @@ export default function App() {
             : undefined
         }
       />
+      )}
       <main className="main">{main}</main>
     </div>
   );

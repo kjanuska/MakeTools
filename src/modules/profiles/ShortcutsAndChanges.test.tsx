@@ -286,7 +286,7 @@ describe("keyboard shortcuts in a group", () => {
 });
 
 describe("settings page", () => {
-  it("opens from the top bar or Ctrl+, and holds the Makebot folder", async () => {
+  it("opens from the Settings tab or Ctrl+, and holds the Makebot folder", async () => {
     backend({ "g.csv": GOOD });
     await open();
     press(",", { ctrlKey: true });
@@ -294,16 +294,17 @@ describe("settings page", () => {
     expect(within(folder).getByText(ROOT)).toBeTruthy();
     expect(within(folder).getByRole("button", { name: "Change folder…" })).toBeTruthy();
     expect(screen.queryByRole("button", { name: "Change folder" })).toBeNull();
-    fireEvent.click(btn("← Back"));
+    expect(screen.queryByRole("button", { name: "← Back" })).toBeNull();
+    fireEvent.click(btn("Profiles"));
     expect(screen.queryByRole("region", { name: "Makebot folder" })).toBeNull();
-    fireEvent.click(btn("⚙ Settings"));
+    fireEvent.click(btn("Settings"));
     expect(screen.getByRole("region", { name: "Keyboard shortcuts" })).toBeTruthy();
   });
 
   it("lists every action with its shortcut", async () => {
     backend({ "g.csv": GOOD });
     await open();
-    fireEvent.click(btn("⚙ Settings"));
+    fireEvent.click(btn("Settings"));
     expect(btn("Shortcut for Save file").textContent).toBe("Ctrl+S");
     expect(btn("Shortcut for Select all rows").textContent).toBe("Ctrl+A");
     expect(btn("Shortcut for Discard changes to file").textContent).toBe("None");
@@ -313,7 +314,7 @@ describe("settings page", () => {
     const { callsOf } = backend({ "g.csv": GOOD });
     await open();
     type(1, "city", "Rockford");
-    fireEvent.click(btn("⚙ Settings"));
+    fireEvent.click(btn("Settings"));
     const key = btn("Shortcut for Save file");
     fireEvent.click(key);
     expect(key.textContent).toBe("Press keys…");
@@ -323,7 +324,8 @@ describe("settings page", () => {
     expect(setShortcutOverrides).toHaveBeenLastCalledWith({ save: "Ctrl+Alt+S" });
     expect(callsOf("save_text")).toEqual([]);
 
-    fireEvent.click(btn("← Back"));
+    // Back to the module: the edited file is still open.
+    fireEvent.click(btn("Profiles"));
     press("s", { ctrlKey: true });
     expect(callsOf("save_text")).toEqual([]);
     press("s", { ctrlKey: true, altKey: true });
@@ -333,7 +335,7 @@ describe("settings page", () => {
   it("taking another action's shortcut removes it from that action", async () => {
     backend({ "g.csv": GOOD });
     await open();
-    fireEvent.click(btn("⚙ Settings"));
+    fireEvent.click(btn("Settings"));
     fireEvent.click(btn("Shortcut for Save file"));
     fireEvent.keyDown(btn("Shortcut for Save file"), { key: "d", ctrlKey: true });
     expect(btn("Shortcut for Save file").textContent).toBe("Ctrl+D");
@@ -345,7 +347,7 @@ describe("settings page", () => {
   it("rejects plain keys, and Escape cancels recording", async () => {
     backend({ "g.csv": GOOD });
     await open();
-    fireEvent.click(btn("⚙ Settings"));
+    fireEvent.click(btn("Settings"));
     const key = btn("Shortcut for Add row");
     fireEvent.click(key);
     fireEvent.keyDown(key, { key: "q" });
@@ -359,7 +361,7 @@ describe("settings page", () => {
   it("removes, resets one, and resets all", async () => {
     backend({ "g.csv": GOOD });
     await open();
-    fireEvent.click(btn("⚙ Settings"));
+    fireEvent.click(btn("Settings"));
     fireEvent.click(btn("Remove shortcut for Add row"));
     expect(btn("Shortcut for Add row").textContent).toBe("None");
     expect(setShortcutOverrides).toHaveBeenLastCalledWith({ addRow: null });

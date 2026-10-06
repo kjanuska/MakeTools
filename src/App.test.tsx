@@ -117,7 +117,7 @@ describe("folder selection", () => {
     const calls = backend();
     render(<App />);
 
-    fireEvent.click(await screen.findByRole("button", { name: "⚙ Settings" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Settings" }));
     fireEvent.click(screen.getByRole("button", { name: "Change folder…" }));
 
     expect(await screen.findByText("D:\\Other", { selector: ".settings .path" })).toBeTruthy();
@@ -136,17 +136,41 @@ describe("folder selection", () => {
     backend();
     render(<App />);
 
-    fireEvent.click(await screen.findByRole("button", { name: "⚙ Settings" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Settings" }));
     fireEvent.click(screen.getByRole("button", { name: "Change folder…" }));
 
     expect(await screen.findByText("disk full")).toBeTruthy();
     expect(screen.getByText(ROOT, { selector: ".settings .path" })).toBeTruthy();
   });
 
+  it("opens Settings as a tab under the modules, in place of the file list", async () => {
+    backend();
+    render(<App />);
+    const nav = await screen.findByRole("navigation", { name: "Modules" });
+    const tabs = within(nav).getAllByRole("button").map((b) => b.textContent);
+    expect(tabs).toEqual(["Accounts", "Profiles", "Proxies", "Tasks", "Settings"]);
+    expect(document.querySelector(".topbar button")).toBeNull();
+
+    const settings = within(nav).getByRole("button", { name: "Settings" });
+    expect(settings.querySelector('svg[data-icon="settings"]')).toBeTruthy();
+    fireEvent.click(settings);
+    expect(settings.getAttribute("aria-current")).toBe("page");
+    expect(within(nav).getByRole("button", { name: "Accounts" }).getAttribute("aria-current")).toBeNull();
+    expect(document.querySelector(".app.settings-open")).toBeTruthy();
+    expect(document.querySelector(".file-list")).toBeNull();
+    expect(screen.getByRole("region", { name: "Makebot folder" })).toBeTruthy();
+
+    fireEvent.click(within(nav).getByRole("button", { name: "Proxies" }));
+    expect(screen.queryByRole("region", { name: "Makebot folder" })).toBeNull();
+    expect(settings.getAttribute("aria-current")).toBeNull();
+    expect(within(nav).getByRole("button", { name: "Proxies" }).getAttribute("aria-current")).toBe("page");
+    expect(document.querySelector(".file-list")).toBeTruthy();
+  });
+
   it("puts Updates first in Settings, with its icon and the app version", async () => {
     backend();
     render(<App />);
-    fireEvent.click(await screen.findByRole("button", { name: "⚙ Settings" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Settings" }));
 
     const sections = [...document.querySelectorAll(".settings section")].map((s) => s.getAttribute("aria-label"));
     expect(sections[0]).toBe("Updates");
@@ -163,15 +187,15 @@ describe("modules and file list", () => {
     render(<App />);
     const nav = await screen.findByRole("navigation", { name: "Modules" });
     const tabs = within(nav).getAllByRole("button");
-    expect(tabs.map((t) => t.textContent)).toEqual(["Accounts", "Profiles", "Proxies", "Tasks"]);
+    expect(tabs.map((t) => t.textContent)).toEqual(["Accounts", "Profiles", "Proxies", "Tasks", "Settings"]);
     const icons = tabs.map((t) => t.querySelector("svg.module-icon")!);
-    expect(icons.map((i) => i.getAttribute("data-icon"))).toEqual(["accounts", "profiles", "proxies", "tasks"]);
+    expect(icons.map((i) => i.getAttribute("data-icon"))).toEqual(["accounts", "profiles", "proxies", "tasks", "settings"]);
     for (const i of icons) {
       expect(i.getAttribute("aria-hidden")).toBe("true");
       expect(i.childElementCount).toBeGreaterThan(0);
     }
     // Drawn differently, not one icon repeated.
-    expect(new Set(icons.map((i) => i.innerHTML)).size).toBe(4);
+    expect(new Set(icons.map((i) => i.innerHTML)).size).toBe(5);
     for (const name of ["Accounts", "Profiles", "Proxies", "Tasks"]) {
       expect(within(nav).getByRole("button", { name })).toBeTruthy();
     }

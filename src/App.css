@@ -80,6 +80,13 @@ button:disabled {
   height: 100vh;
 }
 
+/* Settings has no file list: the page takes its column too. */
+.app.settings-open {
+  grid-template-areas:
+    "top top top"
+    "nav main main";
+}
+
 .topbar {
   grid-area: top;
   display: flex;

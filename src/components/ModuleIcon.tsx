@@ -1,9 +1,11 @@
-// Line icons for the module tabs. Drawn with the current text color, so they
-// follow the active-tab color and dark mode. Decorative: the tab's label names it.
+// Line icons for the module tabs and the Settings tab under them. Drawn with the
+// current text color, so they follow the active-tab color and dark mode. Decorative: the tab's label names it.
 import type { ReactElement } from "react";
 import type { ModuleId } from "../lib/modules";
 
-const PATHS: Record<ModuleId, ReactElement> = {
+export type TabIconId = ModuleId | "settings";
+
+const PATHS: Record<TabIconId, ReactElement> = {
   // A person
   accounts: (
     <>
@@ -36,9 +38,17 @@ const PATHS: Record<ModuleId, ReactElement> = {
       <path d="M12.5 7h8M12.5 17h8" />
     </>
   ),
+  // A gear
+  settings: (
+    <>
+      <circle cx="12" cy="12" r="3" />
+      <path d="M12 2.5v2.5M12 19v2.5M2.5 12H5M19 12h2.5M5.3 5.3l1.8 1.8M16.9 16.9l1.8 1.8M5.3 18.7l1.8-1.8M16.9 7.1l1.8-1.8" />
+      <circle cx="12" cy="12" r="6.5" />
+    </>
+  ),
 };
 
-export function ModuleIcon({ id }: { id: ModuleId }) {
+export function ModuleIcon({ id }: { id: TabIconId }) {
   return (
     <svg
       className="module-icon"
