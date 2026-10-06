@@ -20,6 +20,7 @@ vi.mock("./lib/settings", () => ({
 }));
 vi.mock("./lib/dialogs", () => ({ pickFolder: vi.fn(), confirmAction: vi.fn(), askSaveDiscardCancel: vi.fn(), showMessage: vi.fn() }));
 vi.mock("./lib/window", () => ({ guardWindowClose: vi.fn() }));
+vi.mock("./lib/updater", () => ({ currentVersion: vi.fn(async () => "0.1.72"), findUpdate: vi.fn(async () => null) }));
 
 const ROOT = "C:\\Makebot";
 

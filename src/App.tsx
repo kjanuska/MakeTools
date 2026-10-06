@@ -48,9 +48,11 @@ import { FileList } from "./shell/FileList";
 import { FilePanel } from "./shell/FilePanel";
 import { SettingsPage } from "./shell/SettingsPage";
 import { SitesSettings } from "./shell/SitesSettings";
+import { UpdateSettings, updateStatusText } from "./shell/UpdateSettings";
 import { useDiskCounts, useTextCounter, type FileCount } from "./shell/useFileCounts";
 import { plural, useFileMenu } from "./shell/useFileMenu";
 import { useFolders } from "./shell/useFolders";
+import { useUpdater } from "./shell/useUpdater";
 
 const folderOf = (id: ModuleId) => MODULES.find((m) => m.id === id)!.folder;
 
@@ -85,6 +87,7 @@ export default function App() {
   useStoreVersion(taskStore);
   useStoreVersion(proxyStore);
   const folders = useFolders(root, listVersion);
+  const updater = useUpdater(() => resolveUnsaved("updating"));
   // Counts in the file list. Proxy and account files are read once their module is shown.
   const accountCounts = useDiskCounts(folders.accounts.files, countAccountText, moduleId === "accounts");
   const proxyDiskCounts = useDiskCounts(folders.proxies.files, countProxyText, moduleId === "proxies");
@@ -404,6 +407,12 @@ export default function App() {
           onRename={renameSite}
           onRemove={removeSite}
         />
+        <UpdateSettings
+          version={updater.version}
+          status={updater.status}
+          onCheck={updater.checkNow}
+          onInstall={updater.installPending}
+        />
       </SettingsPage>
     );
   } else if (mod.id === "profiles") {
@@ -501,6 +510,7 @@ export default function App() {
           {root}
         </span>
         {error && <span className="error">{error}</span>}
+        {updater.status.kind === "downloading" && <span className="status">{updateStatusText(updater.status)}</span>}
         <button aria-pressed={settingsOpen} onClick={() => setSettingsOpen((o) => !o)}>
           ⚙ Settings
         </button>

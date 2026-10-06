@@ -26,6 +26,11 @@ export function confirmAction(text: string, title: string): Promise<boolean> {
   return ask(text, { title, kind: "warning" });
 }
 
+/** "Update now" / "Later". True for Update now. */
+export function askUpdateNow(text: string): Promise<boolean> {
+  return ask(text, { title: "Update available", kind: "info", okLabel: "Update now", cancelLabel: "Later" });
+}
+
 export type SaveChoice = "save" | "discard" | "cancel";
 
 const SAVE_LABEL = "Save all";
