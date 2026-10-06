@@ -39,7 +39,7 @@
     "updater": {
       "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IERGN0EwRjQyQUI3MUM4NEMKUldSTXlIR3JRZzk2MzJCNEV2NjFSTUxmZTVvUm01aXZlanVPZGRlUkl1bkpyMUhJVFQvTW43TlMK",
       "endpoints": [
-        "https://github.com/OWNER/REPO/releases/latest/download/latest.json"
+        "https://github.com/kjanuska/MakeTools/releases/latest/download/latest.json"
       ],
       "windows": {
         "installMode": "passive"

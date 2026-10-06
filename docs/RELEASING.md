@@ -16,10 +16,9 @@ The version is `major.minor.<commit count>`, for example `0.1.72`. `major.minor`
 
 ## One-time setup
 1. **Signing key.** It's at `~/.tauri/make-tools.key`, outside the repo, with no password. It was generated on 2026-10-06, and its public key is in `tauri.conf.json`. **Back it up.** If it's lost, installed apps reject every future update, and clients have to reinstall by hand. Never commit it.
-2. **GitHub repo for releases.** Clients download without logging in, so the releases have to be public. If this code repo stays private, make a separate public repo (for example `make-tools-releases`) with at least one commit, such as a README.
-3. Put that repo in `tauri.conf.json`: `https://github.com/<owner>/<repo>/releases/latest/download/latest.json`. The release script refuses to run while it's still `OWNER/REPO`.
-4. Install the GitHub CLI and log in: `winget install GitHub.cli`, then `gh auth login`.
-5. Clients need one manual install of a build that contains the updater (the first release). After that, updates arrive automatically.
+2. **GitHub repo for releases:** [kjanuska/MakeTools](https://github.com/kjanuska/MakeTools), which also holds the code and is `origin`. Clients download without logging in, so it has to stay **public**. If it ever goes private, move the releases to a separate public repo and change the endpoint in `tauri.conf.json`.
+3. Install the GitHub CLI and log in: `winget install GitHub.cli`, then `gh auth login`.
+4. Clients need one manual install of a build that contains the updater (the first release). After that, updates arrive automatically.
 
 ## Publishing a release
 ```
