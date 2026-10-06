@@ -15,11 +15,13 @@ interface Props {
   bindings: Bindings;
   onChangeBindings: (bindings: Bindings) => void;
   onClose: () => void;
+  /** Shown first, above the Makebot folder (the Updates section). */
+  top?: ReactNode;
   /** Extra sections from modules (e.g. the task site list). */
   children?: ReactNode;
 }
 
-export function SettingsPage({ root, onChangeFolder, bindings, onChangeBindings, onClose, children }: Props) {
+export function SettingsPage({ root, onChangeFolder, bindings, onChangeBindings, onClose, top, children }: Props) {
   const [recording, setRecording] = useState<ActionId | null>(null);
   const [note, setNote] = useState<string | null>(null);
 
@@ -71,6 +73,8 @@ export function SettingsPage({ root, onChangeFolder, bindings, onChangeBindings,
         <button onClick={onClose}>← Back</button>
         <h2>Settings</h2>
       </div>
+
+      {top}
 
       <section aria-label="Makebot folder">
         <h3>Makebot folder</h3>

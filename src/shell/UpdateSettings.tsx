@@ -1,3 +1,4 @@
+import { UpdateIcon } from "../components/UpdateIcon";
 import type { UpdateStatus } from "./useUpdater";
 
 interface Props {
@@ -30,8 +31,11 @@ export function UpdateSettings({ version, status, onCheck, onInstall }: Props) {
   const busy = status.kind === "checking" || status.kind === "downloading";
   const text = updateStatusText(status);
   return (
-    <section aria-label="Updates">
-      <h3>Updates</h3>
+    <section aria-label="Updates" className="updates">
+      <h3>
+        <UpdateIcon />
+        Updates
+      </h3>
       <p>Version {version ?? "unknown"}</p>
       {text && <p className={status.kind === "error" ? "error" : "status"}>{text}</p>}
       <button disabled={busy} onClick={onCheck}>

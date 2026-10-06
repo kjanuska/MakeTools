@@ -80,7 +80,7 @@ describe("folder selection", () => {
 
     fireEvent.click(await screen.findByRole("button", { name: "Choose Makebot folder" }));
 
-    expect(await screen.findByText(ROOT)).toBeTruthy();
+    expect(await screen.findByRole("navigation", { name: "Modules" })).toBeTruthy();
     expect(setMakebotPath).toHaveBeenCalledWith(ROOT);
     await screen.findByRole("button", { name: fileItem("popmart") });
     // Every module's folder is listed (tasks need the others to check their links).
@@ -120,8 +120,9 @@ describe("folder selection", () => {
     fireEvent.click(await screen.findByRole("button", { name: "⚙ Settings" }));
     fireEvent.click(screen.getByRole("button", { name: "Change folder…" }));
 
-    expect(await screen.findByText("D:\\Other", { selector: ".root-path" })).toBeTruthy();
-    expect(screen.getByText("D:\\Other", { selector: ".settings .path" })).toBeTruthy();
+    expect(await screen.findByText("D:\\Other", { selector: ".settings .path" })).toBeTruthy();
+    // The folder is only shown in Settings, not in the top bar.
+    expect(document.querySelector(".topbar")!.textContent).not.toContain("D:\\Other");
     expect(pickFolder).toHaveBeenCalledWith(ROOT);
     expect(setMakebotPath).toHaveBeenCalledWith("D:\\Other");
     await waitFor(() =>
@@ -139,7 +140,20 @@ describe("folder selection", () => {
     fireEvent.click(screen.getByRole("button", { name: "Change folder…" }));
 
     expect(await screen.findByText("disk full")).toBeTruthy();
-    expect(screen.getByText(ROOT, { selector: ".root-path" })).toBeTruthy();
+    expect(screen.getByText(ROOT, { selector: ".settings .path" })).toBeTruthy();
+  });
+
+  it("puts Updates first in Settings, with its icon and the app version", async () => {
+    backend();
+    render(<App />);
+    fireEvent.click(await screen.findByRole("button", { name: "⚙ Settings" }));
+
+    const sections = [...document.querySelectorAll(".settings section")].map((s) => s.getAttribute("aria-label"));
+    expect(sections[0]).toBe("Updates");
+    expect(sections[1]).toBe("Makebot folder");
+    const updates = screen.getByRole("region", { name: "Updates" });
+    expect(within(updates).getByRole("heading", { name: "Updates" }).querySelector("svg.update-icon")).toBeTruthy();
+    expect(await within(updates).findByText("Version 0.1.72")).toBeTruthy();
   });
 });
 

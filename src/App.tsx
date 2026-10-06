@@ -399,6 +399,14 @@ export default function App() {
         bindings={bindings}
         onChangeBindings={changeBindings}
         onClose={() => setSettingsOpen(false)}
+        top={
+          <UpdateSettings
+            version={updater.version}
+            status={updater.status}
+            onCheck={updater.checkNow}
+            onInstall={updater.installPending}
+          />
+        }
       >
         <SitesSettings
           sites={sites ?? null}
@@ -406,12 +414,6 @@ export default function App() {
           onAdd={(s) => updateSites([...(sites ?? []), s])}
           onRename={renameSite}
           onRemove={removeSite}
-        />
-        <UpdateSettings
-          version={updater.version}
-          status={updater.status}
-          onCheck={updater.checkNow}
-          onInstall={updater.installPending}
         />
       </SettingsPage>
     );
@@ -506,9 +508,7 @@ export default function App() {
     <div className="app">
       <header className="topbar">
         <strong>Make Tools</strong>
-        <span className="root-path" title={root}>
-          {root}
-        </span>
+        <span className="topbar-spacer" />
         {error && <span className="error">{error}</span>}
         {updater.status.kind === "downloading" && <span className="status">{updateStatusText(updater.status)}</span>}
         <button aria-pressed={settingsOpen} onClick={() => setSettingsOpen((o) => !o)}>
