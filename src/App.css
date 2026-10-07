@@ -1420,7 +1420,12 @@ button.link {
   outline-offset: 2px;
 }
 
-/* Stand-ins for the rows of a long table that aren't drawn (VirtualBody). */
+/* Stand-ins for the rows of a long table that aren't drawn (VirtualBody). The browser
+   mustn't keep its scroll position pinned to them while they resize. */
+tr.virtual-pad {
+  overflow-anchor: none;
+}
+
 tr.virtual-pad td {
   padding: 0;
   border: none;
