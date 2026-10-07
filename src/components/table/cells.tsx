@@ -27,6 +27,8 @@ export interface CellProps<Ctx> {
   onBlur?: () => void;
   /** "Add…" was picked in a dropdown. */
   onRequestAdd?: () => void;
+  /** id of the <datalist> holding a `suggest` text cell's suggestions. */
+  listId?: string;
 }
 
 export function Cell<Ctx>(props: CellProps<Ctx>) {
@@ -92,6 +94,7 @@ export function Cell<Ctx>(props: CellProps<Ctx>) {
           {...common}
           className={`${common.className}${random ? " is-random" : ""}${shown != null ? " has-display" : ""}`}
           value={value}
+          list={type.suggest ? props.listId : undefined}
           spellCheck={false}
           autoComplete="off"
           onChange={(e) => onChange(e.target.value)}

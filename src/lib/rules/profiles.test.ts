@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { PROFILE_FIELDS, type ProfileField } from "../formats/profiles";
 import { countErrors, optionsOf, validateRecords, validateValue } from "./engine";
-import { PROFILE_RULES, US_STATES, ccYearOptions } from "./profiles";
+import { PROFILE_RULES, US_RULES, US_STATES, ccYearOptions, profileRulesFor } from "./profiles";
 
 const VALID: Record<ProfileField, string> = {
   profileName: "1",
@@ -21,7 +21,10 @@ const VALID: Record<ProfileField, string> = {
   cvv: "123",
 };
 
-const check = (field: ProfileField, value: string) => validateValue(PROFILE_RULES[field], value);
+/** Checks a value in a US row. */
+const check = (field: ProfileField, value: string) => validateValue(US_RULES[field], value);
+/** Checks a value in a row of any other country. */
+const checkOther = (field: ProfileField, value: string) => validateValue(PROFILE_RULES[field], value);
 
 function record(id: number, overrides: Partial<Record<ProfileField, string>> = {}) {
   const v = { ...VALID, ...overrides };
@@ -96,10 +99,12 @@ describe("profile rules", () => {
     expect(check("zipcode", value)).toBe(ok ? null : "must be exactly 5 digits");
   });
 
-  it("country must be US", () => {
-    expect(check("country", "US")).toBeNull();
-    expect(check("country", "us")).toBe("isn't one of the allowed values");
-    expect(check("country", "CA")).toBe("isn't one of the allowed values");
+  it("country: any 2 uppercase letters", () => {
+    for (const ok of ["US", "LT", "GB", "JP", "CA", "XX"]) expect(check("country", ok), ok).toBeNull();
+    for (const bad of ["us", "Us", "USA", "U", "U1", "ＵＳ"]) {
+      expect(check("country", bad), bad).toBe("must be 2 uppercase letters (e.g. US, GB)");
+    }
+    expect(check("country", "")).toBe("is required");
   });
 
   it.each([
@@ -140,43 +145,87 @@ describe("profile rules", () => {
     expect(optionsOf(PROFILE_RULES.ccYear)).toEqual(ccYearOptions());
   });
 
-  it("has dropdowns exactly for state, country, ccMonth and ccYear", () => {
-    const withOptions = PROFILE_FIELDS.filter((f) => optionsOf(PROFILE_RULES[f]) !== null);
-    expect(withOptions).toEqual(["state", "country", "ccMonth", "ccYear"]);
+  it("has dropdowns for ccMonth and ccYear, plus state in US rows", () => {
+    expect(PROFILE_FIELDS.filter((f) => optionsOf(PROFILE_RULES[f]) !== null)).toEqual(["ccMonth", "ccYear"]);
+    expect(PROFILE_FIELDS.filter((f) => optionsOf(US_RULES[f]) !== null)).toEqual(["state", "ccMonth", "ccYear"]);
+  });
+
+  it("US rules differ from the others only in state, zipcode and phoneNumber", () => {
+    const differ = PROFILE_FIELDS.filter((f) => US_RULES[f] !== PROFILE_RULES[f]);
+    expect(differ).toEqual(["state", "zipcode", "phoneNumber"]);
+  });
+});
+
+describe("profile rules outside the US", () => {
+  it("state is optional free text", () => {
+    for (const ok of ["", "ENG", "東京都", "Île-de-France", "il", "Bavaria"]) expect(checkOther("state", ok), ok).toBeNull();
+    expect(checkOther("state", "A,B")).toBe("can't contain a comma");
+  });
+
+  it("zipcode is required, in any format", () => {
+    for (const ok of ["02105", "PR3 1NJ", "150-0001", "D02 X285", "1010", "LV-1050"]) expect(checkOther("zipcode", ok), ok).toBeNull();
+    expect(checkOther("zipcode", "")).toBe("is required");
+    expect(checkOther("zipcode", " PR3 1NJ")).toBe("can't start or end with a space");
+  });
+
+  it.each([
+    ["+37060000000", true],
+    ["7700900000", true],
+    ["09000000000", true],
+    ["+1", true],
+    ["+", false],
+    ["++370600", false],
+    ["370+600", false],
+    ["+370 600 00000", false],
+    ["070-0000-0000", false],
+  ])("phoneNumber %s valid=%s", (value, ok) => {
+    expect(checkOther("phoneNumber", value)).toBe(ok ? null : "must be digits, optionally starting with +");
+  });
+
+  it("every other field has the same rules as in the US", () => {
+    for (const f of ["profileName", "email", "ccNumber", "ccMonth", "country"] as const) {
+      expect(PROFILE_RULES[f]).toBe(US_RULES[f]);
+    }
+  });
+
+  it("rows are checked against US rules only when country is exactly US", () => {
+    expect(profileRulesFor(record(1).values)).toBe(US_RULES);
+    for (const c of ["LT", "GB", "us", ""]) expect(profileRulesFor(record(1, { country: c }).values), c).toBe(PROFILE_RULES);
   });
 });
 
 describe("validating a whole file", () => {
   it("has no errors for valid rows", () => {
-    expect(validateRecords(PROFILE_FIELDS, PROFILE_RULES, [record(1), record(2, { profileName: "2" })]).size).toBe(0);
+    expect(validateRecords(PROFILE_FIELDS, profileRulesFor, [record(1), record(2, { profileName: "2" })]).size).toBe(0);
   });
 
-  it("flags every row that shares a profileName", () => {
-    const errors = validateRecords(PROFILE_FIELDS, PROFILE_RULES, [
+  it("profileName may repeat; no field is checked for duplicates", () => {
+    const errors = validateRecords(PROFILE_FIELDS, profileRulesFor, [
       record(1, { profileName: "7" }),
       record(2, { profileName: "8" }),
       record(3, { profileName: "7" }),
+      record(4, { profileName: "7", country: "LT", state: "", zipcode: "01103", phoneNumber: "+37060000000" }),
     ]);
-    expect(errors.get(1)).toEqual({ profileName: "is used by more than one row" });
-    expect(errors.get(3)).toEqual({ profileName: "is used by more than one row" });
+    expect(errors.size).toBe(0);
+  });
+
+  it("checks each row by its own country", () => {
+    const errors = validateRecords(PROFILE_FIELDS, profileRulesFor, [
+      record(1, { state: "", zipcode: "PR1 1AA", phoneNumber: "+447700900000" }),
+      record(2, { country: "GB", state: "", zipcode: "PR1 1AA", phoneNumber: "+447700900000" }),
+      record(3, { country: "GB", zipcode: "", phoneNumber: "+44 7700" }),
+    ]);
+    expect(errors.get(1)).toEqual({
+      state: "is required",
+      zipcode: "must be exactly 5 digits",
+      phoneNumber: "must be exactly 10 digits",
+    });
     expect(errors.has(2)).toBe(false);
-  });
-
-  it("names differing only in case are not duplicates", () => {
-    const errors = validateRecords(PROFILE_FIELDS, PROFILE_RULES, [
-      record(1, { profileName: "a" }),
-      record(2, { profileName: "A" }),
-    ]);
-    expect(errors.size).toBe(0);
-  });
-
-  it("no other field is checked for duplicates", () => {
-    const errors = validateRecords(PROFILE_FIELDS, PROFILE_RULES, [record(1), record(2, { profileName: "2" })]);
-    expect(errors.size).toBe(0);
+    expect(errors.get(3)).toEqual({ zipcode: "is required", phoneNumber: "must be digits, optionally starting with +" });
   });
 
   it("reports one error per field and counts them", () => {
-    const errors = validateRecords(PROFILE_FIELDS, PROFILE_RULES, [
+    const errors = validateRecords(PROFILE_FIELDS, profileRulesFor, [
       record(1, { zipcode: "ZIP", state: "Il", email: "" }),
       record(2, { profileName: "ALL" }),
     ]);
@@ -190,7 +239,7 @@ describe("validating a whole file", () => {
   });
 
   it("an empty name is required, not a duplicate", () => {
-    const errors = validateRecords(PROFILE_FIELDS, PROFILE_RULES, [
+    const errors = validateRecords(PROFILE_FIELDS, profileRulesFor, [
       record(1, { profileName: "" }),
       record(2, { profileName: "" }),
     ]);

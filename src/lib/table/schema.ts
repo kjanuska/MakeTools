@@ -15,8 +15,8 @@ export interface TableSchema<Ctx = unknown> {
   format: TableFormat;
   labels: TableLabels;
   /**
-   * Column holding each row's name (unique within a file; new rows get their
-   * row number), or null if rows have no name.
+   * Column holding each row's name (new rows get their row number), or null
+   * if rows have no name.
    */
   nameCol: number | null;
   /** Values for a new, empty row. */

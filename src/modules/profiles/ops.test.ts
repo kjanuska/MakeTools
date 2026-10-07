@@ -8,7 +8,6 @@ import {
   fromTemplate,
   importRows,
   moveRows,
-  nameClashes,
   parseImport,
   selectedValues,
   setCell,
@@ -208,18 +207,5 @@ describe("move/copy helpers", () => {
     expect(vals).toEqual([R1.split(","), R3.split(",")]);
     vals[0][0] = "changed";
     expect((doc.rows[1] as ProfileRow).values[0]).toBe("1");
-  });
-
-  it("nameClashes finds names already in the target or repeated", () => {
-    const target = parseProfiles(TEXT);
-    expect(nameClashes(target, ["4", "5"])).toEqual([]);
-    expect(nameClashes(target, ["2", "4", "3"])).toEqual(["2", "3"]);
-    expect(nameClashes(target, ["7", "7", "7"])).toEqual(["7"]);
-    expect(nameClashes(parseProfiles(""), ["1"])).toEqual([]);
-  });
-
-  it("nameClashes is case-sensitive, like the uniqueness rule", () => {
-    const target = parseProfiles(`${H}\r\n${row("a")}\r\n`);
-    expect(nameClashes(target, ["A"])).toEqual([]);
   });
 });

@@ -22,6 +22,9 @@ export interface FieldRule {
 
 export type Rules<F extends string> = Record<F, FieldRule>;
 
+/** Rules for a whole file, or rules picked per row from its values (e.g. stricter for US addresses). */
+export type RulesFor<F extends string> = Rules<F> | ((values: readonly string[]) => Rules<F>);
+
 export function optionsOf(rule: FieldRule): readonly string[] | null {
   if (!rule.options) return null;
   return typeof rule.options === "function" ? rule.options() : rule.options;
@@ -57,7 +60,7 @@ export type ValidationErrors<F extends string> = Map<number, Partial<Record<F, s
 
 export function validateRecords<F extends string>(
   fields: readonly F[],
-  rules: Rules<F>,
+  rules: RulesFor<F>,
   records: readonly RecordToCheck[],
 ): ValidationErrors<F> {
   const errors: ValidationErrors<F> = new Map();
@@ -67,15 +70,16 @@ export function validateRecords<F extends string>(
     errors.set(id, e);
   };
 
+  const rulesOf = typeof rules === "function" ? records.map((r) => rules(r.values)) : records.map(() => rules);
   fields.forEach((field, col) => {
-    const rule = rules[field];
     const seen = new Map<string, number[]>();
-    for (const r of records) {
+    records.forEach((r, i) => {
+      const rule = rulesOf[i][field];
       const value = r.values[col] ?? "";
       const msg = validateValue(rule, value);
       if (msg) add(r.id, field, msg);
       if (rule.unique && value !== "") seen.set(value, [...(seen.get(value) ?? []), r.id]);
-    }
+    });
     for (const ids of seen.values()) {
       if (ids.length > 1) ids.forEach((id) => add(id, field, "is used by more than one row"));
     }

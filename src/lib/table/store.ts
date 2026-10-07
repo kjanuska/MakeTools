@@ -5,7 +5,7 @@ import { useSyncExternalStore } from "react";
 import { parseTable, serializeTable, type TableDoc } from "../formats/csvTable";
 import { readText, saveText, type FileEntry, type TextFile } from "../fs";
 import { countErrors, type ValidationErrors } from "../rules/engine";
-import { deleteRows, importRows, isRecord, nameClashes, selectedValues } from "./ops";
+import { deleteRows, importRows, isRecord, selectedValues } from "./ops";
 import type { TableSchema } from "./schema";
 
 export interface DocEntry {
@@ -202,27 +202,18 @@ export class TableStore<Ctx = unknown> {
   }
 
   /**
-   * Copies or moves the selected rows to the end of another file. If rows
-   * have names, they're kept, and a name that already exists in the target
-   * (or repeats within the selection) refuses the whole action. Both files
-   * are left with unsaved changes.
+   * Copies or moves the selected rows to the end of another file, keeping
+   * their names (names may repeat). Both files are left with unsaved changes.
    */
   transfer(from: string, to: string, ids: readonly number[], mode: "copy" | "move"): TransferResult {
     const src = this.entries.get(from);
     const dst = this.entries.get(to);
-    const { item, items, file } = this.schema.labels;
+    const { item, file } = this.schema.labels;
     if (!src || !dst || from === to) return { ok: false, error: `Pick another ${file}.` };
     const readOnly = [src, dst].find((e) => !e.doc.headerOk);
     if (readOnly) return { ok: false, error: `${displayName(readOnly.file.name)} is read-only (wrong header).` };
     const values = selectedValues(src.doc, ids);
     if (values.length === 0) return { ok: false, error: `Select ${item} rows first.` };
-    const col = this.schema.nameCol;
-    if (col !== null) {
-      const clashes = nameClashes(this.schema, dst.doc, values.map((v) => v[col]));
-      if (clashes.length) {
-        return { ok: false, error: `${displayName(dst.file.name)} already has ${items} named: ${clashes.join(", ")}. Rename them first.` };
-      }
-    }
     this.entries.set(to, this.withDoc(dst, importRows(this.schema, dst.doc, values)));
     if (mode === "move") {
       const moved = src.doc.rows.filter((r) => ids.includes(r.id) && isRecord(r)).map((r) => r.id);

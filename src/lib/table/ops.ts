@@ -114,20 +114,6 @@ export function selectedValues(doc: TableDoc, ids: readonly number[]): string[][
   return doc.rows.filter((r): r is DataRow => isRecord(r) && set.has(r.id)).map((r) => [...r.values]);
 }
 
-/** Names that already exist in `target`, or repeat within `names`, in first-seen order. */
-export function nameClashes(schema: TableSchema<never>, target: TableDoc, names: readonly string[]): string[] {
-  const col = schema.nameCol;
-  if (col === null) return [];
-  const existing = new Set(target.rows.filter(isRecord).map((r) => r.values[col]));
-  const seen = new Set<string>();
-  const clashes: string[] = [];
-  for (const n of names) {
-    if ((existing.has(n) || seen.has(n)) && !clashes.includes(n)) clashes.push(n);
-    seen.add(n);
-  }
-  return clashes;
-}
-
 /**
  * Replaces every record with `rows` (e.g. a generated task file). Blank and
  * unparseable lines are kept, and the new records go where the first record

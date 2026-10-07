@@ -33,21 +33,23 @@ Rules for every field: the value must not contain `,`, `"`, CR or LF (the file f
 
 | Field | Required | Rule | Input |
 |---|---|---|---|
-| profileName | yes | unique within the file (the only duplicate check); not `ALL` (case-sensitive: `all` is allowed) | text |
+| profileName | yes | any value, repeats allowed; not `ALL` (case-sensitive: `all` is allowed) | text |
 | firstName | yes | none beyond the format rule | text |
 | lastName | yes | none beyond the format rule | text |
 | email | yes | valid email format: `local@domain.tld`, no spaces | text |
 | address1 | yes | none beyond the format rule | text |
 | address2 | **no** | none beyond the format rule | text |
 | city | yes | none beyond the format rule | text |
-| state | yes | one of the 50 US state codes, uppercase (DC and territories not included) | **dropdown** |
-| zipcode | yes | exactly 5 digits | text |
-| country | yes | `US` only | **dropdown** |
-| phoneNumber | yes | exactly 10 digits | text |
+| state | US: yes · other: **no** | US: one of the 50 US state codes, uppercase (DC and territories not included). Other countries: free text (e.g. `ENG`, `東京都`) | US: **dropdown** · other: text |
+| zipcode | yes | US: exactly 5 digits. Other countries: any format (e.g. `PR3 1NJ`, `150-0001`) | text |
+| country | yes | any 2 uppercase letters (`US`, `LT`, `GB`, `JP`, …) | text, suggesting `US` and the codes already in the group |
+| phoneNumber | yes | US: exactly 10 digits. Other countries: digits, optionally starting with `+` (e.g. `+37060000000`) | text |
 | ccNumber | yes | digits only, any length (all card types) | text |
 | ccMonth | yes | `01`–`12`, two digits | **dropdown** |
 | ccYear | yes | two digits; the dropdown shows the current year to +10 (`26`–`36` in 2026), plus an older value a row already has | **dropdown** |
 | cvv | yes | digits only, any length | text |
+
+**US vs other countries (2026-10-07):** a row whose country is exactly `US` gets the strict US checks for state, zipcode and phoneNumber; any other country gets the relaxed ones. Changing a row's country switches its state cell between the dropdown and free text. Bulk edit of state follows the first selected row's country. The US rules are `US_RULES` in the config, picked per row by `profileRulesFor`.
 
 Rule: when a field's set of allowed values is known and reasonably small, it's shown as a dropdown.
 
@@ -58,12 +60,12 @@ Per group (the file being edited):
 - Add, delete, duplicate and reorder rows.
 - **Bulk edit:** select many rows (or the whole group) and set one field to the same value on all of them. The bulk edit panel is always open.
 - **Create from template:** pick an existing row as a template and create N new rows from it.
-- **Default profileName for new rows** (added, from a template or pasted without a name): the row's 1-based position in the file, not counting the header. For example, a new 51st row gets `51`. It can be edited afterwards. If that name is already taken, the uniqueness rule flags it like any other duplicate.
+- **Default profileName for new rows** (added, from a template or pasted without a name): the row's 1-based position in the file, not counting the header. For example, a new 51st row gets `51`. It can be edited afterwards. Names may repeat, so a taken name is fine.
 - **Import:** paste rows in the same 15-column comma-separated format and add them to the group. They're validated like any other row.
 
 Across groups:
 - Create a new empty group, and rename, copy or delete a group file.
-- Move or copy selected profiles to another group. Name clashes in the target group block the action.
+- Move or copy selected profiles to another group. Names already in the target group are allowed.
 
 Every change is saved through `save_text`, which makes a backup first. **Renaming and deleting group files needs new Rust commands** (`rename_file`, `delete_file`), and both make a backup first.
 
@@ -85,21 +87,22 @@ Every change is saved through `save_text`, which makes a backup first. **Renamin
 Same change as the feature, following the project's testing rules:
 - Byte-exact round trip: CRLF, LF, mixed, trailing newline or not, BOM, 0-byte, header-only, blank lines, unparseable rows, header mismatch, non-ASCII.
 - Editing one cell changes only that row's bytes. Adding a row uses the file's line ending.
-- Every rule in the config, including the edge values (`00`/`13` month, 4- or 6-digit zip, lowercase state, `ALL`, duplicate name, comma in value).
-- Bulk edit, template creation, import parsing, and move/copy between groups including name clashes.
+- Every rule in the config, including the edge values (`00`/`13` month, 4- or 6-digit zip, lowercase state, `ALL`, comma in value), the US vs other-country rules, and repeated names being allowed.
+- Bulk edit, template creation, import parsing, and move/copy between groups (names already in the target are allowed).
 - Rust: `rename_file` and `delete_file` back up first, work atomically and fail safely.
 
 ## Decisions (open questions answered 2026-09-23)
 1. Saving is blocked until **every** row in the file is valid, including old placeholder rows.
 2. email: valid email format check.
-3. phoneNumber: exactly 10 digits.
-4. state: the 50 states only.
+3. phoneNumber: exactly 10 digits (US rows; see 11).
+4. state: the 50 states only (US rows; see 11).
 5. ccYear: current year to +10, and an older existing value is still shown.
 6. `ALL` is reserved only in that exact uppercase form.
 7. New rows' profileName defaults to their row number, and can be edited.
 8. Spaces at the start or end of a value block saving.
 9. Rules live in a config file in the code, not an in-app editor.
-10. profileName must be unique within a file. There are no other duplicate checks.
+10. ~~profileName must be unique within a file.~~ Changed 2026-10-07: profileName can be anything and may repeat (only `ALL` is reserved). There are no duplicate checks.
+11. (2026-10-07) Profiles can be outside the US (see `eu.csv`, `example.csv`). country is any 2 uppercase letters. US rows keep the strict state/zip/phone checks; other countries have an optional free-text state, a required zipcode in any format, and a phone of digits with an optional leading `+`.
 
 ## Open questions
 _None._
@@ -107,7 +110,7 @@ _None._
 ## Build notes (2a, 2026-09-23)
 Details settled while building. Each is small, and the user can change any of them at the 2a check:
 - **New rows always go at the end:** added, duplicated, from a template, or pasted. Use Move up/down to reorder. This keeps new row numbers (and so default names) from clashing with rows below them.
-- **Add row** prefills `country` with `US`, the only allowed value. Every other field starts empty.
+- **Add row** prefills `country` with `US`, the usual value. Every other field starts empty.
 - **Duplicate** copies every value except `profileName`, which becomes the new row number.
 - **Paste rows** rejects the whole paste if any line doesn't have exactly 15 values. A pasted row with an empty name gets its row number.
 - **Template count** is 1–1000 per action.
@@ -128,7 +131,7 @@ Details settled while building. Each is small, and the user can change any of th
   - Rename, copy and delete are disabled while the group has unsaved changes.
 - **Group names** are file names without `.csv`. They can't be empty, can't start or end with a space and can't end with a dot. They can't be a Windows reserved name. They can't contain `, < > : " / \ | ? *` or control characters (a comma or quote would break task CSVs). They must be unique, ignoring case. A rename can change only the case.
 - **Safety:** `create_file` never overwrites an existing file, and `rename_file` refuses to replace another file. Delete and rename back up the file first under its old path. To get a deleted group back, create a group with the same name and restore it from Backups.
-- **Move / copy to group** (editor panel): the selected profiles are added to the end of another editable group with their names kept. Any name clash blocks the whole action. Both groups are left with unsaved changes until saved.
+- **Move / copy to group** (editor panel): the selected profiles are added to the end of another editable group with their names kept, even if the target already has those names. Both groups are left with unsaved changes until saved.
 - Reloading a file that hasn't changed on disk keeps its rows as they are, so selections survive list refreshes.
 ## Build notes (2b feedback, 2026-09-23)
 - **Changed cells:**

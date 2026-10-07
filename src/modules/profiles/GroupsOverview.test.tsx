@@ -352,15 +352,15 @@ describe("moving and copying profiles between groups", () => {
     expect(changes.getAllByRole("button", { name: /profile\// }).map((b) => b.textContent)).toEqual(["M profile/empty"]);
   });
 
-  it("refuses when a name already exists in the target", async () => {
+  it("moves a profile whose name already exists in the target", async () => {
     backend(FILES);
     await openOverview();
     await openGroup("25");
     fireEvent.click(screen.getByRole("rowheader", { name: "Row 1" }));
-    const panel = transfer("5.csv", "Move");
-    expect(within(panel).getByText("5 already has profiles named: 1. Rename them first.")).toBeTruthy();
-    expect(cell(1, "profileName").value).toBe("1");
-    expect(within(screen.getByRole("region", { name: "Unsaved changes" })).getByText("None")).toBeTruthy();
+    transfer("5.csv", "Move");
+    expect(screen.getByRole("status").textContent).toContain("Moved 1 profile to 5 (not saved yet).");
+    const changes = within(screen.getByRole("region", { name: "Unsaved changes" }));
+    expect(changes.getAllByRole("button", { name: /profile\// }).map((b) => b.textContent)).toEqual(["M profile/25", "M profile/5"]);
   });
 
   it("offers only other, editable groups as targets", async () => {

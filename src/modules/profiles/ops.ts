@@ -25,6 +25,3 @@ export const parseImport = (text: string) => table.parseImport(PROFILE_SCHEMA, t
 
 export const importRows = (doc: ProfileDoc, rows: readonly (readonly string[])[]) =>
   table.importRows(PROFILE_SCHEMA, doc, rows);
-
-export const nameClashes = (target: ProfileDoc, names: readonly string[]) =>
-  table.nameClashes(PROFILE_SCHEMA, target, names);

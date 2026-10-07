@@ -229,11 +229,12 @@ describe("ProfileStore.transfer", () => {
     expect(store.get(p("e.csv"))!.serialized).toBe(`${H}\r\n${row("1")}\r\n`);
   });
 
-  it("refuses when a name already exists in the target, changing nothing", async () => {
+  it("allows names that already exist in the target, and the target stays valid", async () => {
     const { store, p, rowIds } = await setup({ "a.csv": GOOD, "b.csv": `${H}\r\n${row("2")}\r\n` });
     const r = store.transfer(p("a.csv"), p("b.csv"), rowIds("a.csv"), "move");
-    expect(r).toEqual({ ok: false, error: "b already has profiles named: 2. Rename them first." });
-    expect(store.dirtyEntries()).toEqual([]);
+    expect(r.ok).toBe(true);
+    expect(store.get(p("b.csv"))!.serialized).toBe(`${H}\r\n${row("2")}\r\n${row("1")}\r\n${row("2")}\r\n`);
+    expect(store.get(p("b.csv"))!.errorCount).toBe(0);
   });
 
   it("skips raw rows and refuses when nothing is selected", async () => {

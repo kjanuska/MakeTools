@@ -8,9 +8,11 @@ export type CellType<Ctx> =
   /**
    * Free text. `random` highlights the special value "random". `display`, when
    * it returns something, is shown in place of the text while the cell isn't
-   * being edited; clicking into the cell shows the text to edit.
+   * being edited; clicking into the cell shows the text to edit. `suggest`
+   * offers `base` plus the values already in this column of the file, while
+   * still accepting anything typed.
    */
-  | { kind: "text"; random?: boolean; display?: (value: string) => ReactNode }
+  | { kind: "text"; random?: boolean; display?: (value: string) => ReactNode; suggest?: { base: readonly string[] } }
   /** Dropdown. `add` puts an "Add…" entry at the end that creates a new option. */
   | {
       kind: "select";
@@ -39,7 +41,8 @@ export interface SearchMatch {
 
 export interface TableUI<Ctx> {
   schema: TableSchema<Ctx>;
-  cell(col: number): CellType<Ctx>;
+  /** `values` is the row (or the bulk edit sample row), for cells whose type depends on other cells. */
+  cell(col: number, values?: readonly string[]): CellType<Ctx>;
   optional(col: number): boolean;
   /** Changing one cell may change others (e.g. profileName follows profileGroup). */
   applyEdit?(values: readonly string[], col: number, value: string, ctx: Ctx): string[];

@@ -131,11 +131,11 @@ describe("profiles grid", () => {
     expect(td.children).toHaveLength(1);
   });
 
-  it("uses dropdowns for state, country, ccMonth and ccYear", async () => {
+  it("uses dropdowns for a US state, ccMonth and ccYear", async () => {
     backend({ "g.csv": GOOD });
     await open();
-    for (const f of ["state", "country", "ccMonth", "ccYear"]) expect(cell(1, f).tagName).toBe("SELECT");
-    for (const f of ["profileName", "zipcode", "address1", "ccNumber"]) expect(cell(1, f).tagName).toBe("INPUT");
+    for (const f of ["state", "ccMonth", "ccYear"]) expect(cell(1, f).tagName).toBe("SELECT");
+    for (const f of ["profileName", "zipcode", "address1", "ccNumber", "country"]) expect(cell(1, f).tagName).toBe("INPUT");
     expect(within(cell(1, "state")).getAllByRole("option")).toHaveLength(50);
   });
 
@@ -144,6 +144,45 @@ describe("profiles grid", () => {
     await open();
     expect(cell(1, "state").value).toBe("Il");
     expect(within(cell(1, "state")).getByRole("option", { name: "Il (current)" })).toBeTruthy();
+  });
+
+  it("other countries: free-text state, any zip, phone with +; saved byte-exact", async () => {
+    const lt = "lt1,Jonas,Jonaitis,jonas@example.com,Gedimino pr. 1,,Vilnius,,01103,LT,+37060000000,4111111111111111,01,28,123";
+    const jp = "jp1,Taro,Yamada,taro@example.com,1-1 Chiyoda,,Chiyoda-ku,東京都,100-0001,JP,09000000000,4111111111111111,01,28,123";
+    const gb = "gb1,Jane,Smith,jane@example.co.uk,1 High St,Flat 2,Preston,ENG,PR1 1AA,GB,7700900000,4111111111111111,01,28,123";
+    const text = `${H}\r\n${lt}\r\n${jp}\r\n${gb}\r\n${row("4")}\r\n`;
+    const { saves } = backend({ "g.csv": text });
+    await open();
+    expect(status()).toContain("No errors");
+    expect(cell(1, "state").tagName).toBe("INPUT");
+    expect(cell(2, "state").value).toBe("東京都");
+    expect(cell(4, "state").tagName).toBe("SELECT");
+    type(1, "city", "Kaunas");
+    await save();
+    expect(saves[0].text).toBe(text.replace(",Vilnius,", ",Kaunas,"));
+  });
+
+  it("changing the country switches the state between dropdown and text, and the checks with it", async () => {
+    backend({ "g.csv": `${H}\r\n${row("1", { zip: "PR1 1AA", state: "ENG" })}\r\n` });
+    await open();
+    expect(cell(1, "state").tagName).toBe("SELECT");
+    expect(cell(1, "zipcode").title).toBe("zipcode must be exactly 5 digits");
+    type(1, "country", "GB");
+    expect(cell(1, "state").tagName).toBe("INPUT");
+    expect(cell(1, "state").value).toBe("ENG");
+    expect(status()).toContain("No errors");
+    type(1, "country", "gb");
+    expect(cell(1, "country").title).toBe("country must be 2 uppercase letters (e.g. US, GB)\nWas: US");
+  });
+
+  it("country suggests US and the codes already in the group", async () => {
+    backend({ "g.csv": `${H}\r\n${row("1")}\r\n${row("2").replace(",US,", ",DE,")}\r\n` });
+    await open();
+    const list = document.getElementById(cell(1, "country").getAttribute("list")!)!;
+    expect(list.tagName).toBe("DATALIST");
+    expect([...list.querySelectorAll("option")].map((o) => o.value)).toEqual(["US", "DE"]);
+    expect(cell(2, "country").getAttribute("list")).toBe(cell(1, "country").getAttribute("list"));
+    expect(cell(1, "city").getAttribute("list")).toBeNull();
   });
 
   it("says when a group is empty (header only or 0 bytes)", async () => {
@@ -270,12 +309,13 @@ describe("editing and saving", () => {
     expect(button("Save").disabled).toBe(true);
   });
 
-  it("flags duplicate names and ALL", async () => {
+  it("allows duplicate names but flags ALL", async () => {
     backend({ "g.csv": GOOD });
     await open();
     type(3, "profileName", "1");
-    expect(cell(1, "profileName").title).toBe("profileName is used by more than one row");
-    expect(cell(3, "profileName").title).toBe("profileName is used by more than one row\nWas: 3");
+    expect(cell(1, "profileName").getAttribute("aria-invalid")).toBeNull();
+    expect(cell(3, "profileName").title).toBe("Was: 3");
+    expect(button("Save").disabled).toBe(false);
     type(3, "profileName", "ALL");
     expect(cell(3, "profileName").title).toBe('profileName can\'t be "ALL"\nWas: 3');
     expect(cell(1, "profileName").getAttribute("aria-invalid")).toBeNull();
@@ -397,9 +437,10 @@ describe("row actions", () => {
     expect(cell(1, "profileName").value).toBe("3");
     expect(selectedRows()).toEqual(["1"]);
     fireEvent.click(button("Duplicate"));
-    // The copy is named after its row number (3), which clashes with the moved row.
-    expect(cell(3, "profileName").title).toBe("profileName is used by more than one row");
-    expect(button("Save").disabled).toBe(true);
+    // The copy is named after its row number (3), the same as the moved row: names may repeat.
+    expect(cell(3, "profileName").value).toBe("3");
+    expect(cell(3, "profileName").getAttribute("aria-invalid")).toBeNull();
+    expect(button("Save").disabled).toBe(false);
     type(3, "profileName", "9");
     await save();
     const peoria = row("3", { city: "Peoria" });
@@ -427,8 +468,22 @@ describe("row actions", () => {
     backend({ "g.csv": GOOD });
     await open();
     const panel = screen.getByRole("region", { name: "Bulk edit" });
-    fireEvent.change(within(panel).getByRole("combobox", { name: /Field/ }), { target: { value: "state" } });
+    fireEvent.change(within(panel).getByRole("combobox", { name: /Field/ }), { target: { value: "ccMonth" } });
     expect(within(panel).getByLabelText("New value").tagName).toBe("SELECT");
+  });
+
+  it("bulk edit of state follows the first selected row's country", async () => {
+    backend({ "g.csv": `${H}\r\n${row("1")}\r\n${row("2").replace(",US,", ",GB,")}\r\n` });
+    await open();
+    const panel = screen.getByRole("region", { name: "Bulk edit" });
+    fireEvent.change(within(panel).getByRole("combobox", { name: /Field/ }), { target: { value: "state" } });
+    clickRow(1);
+    expect(within(panel).getByLabelText("New value").tagName).toBe("SELECT");
+    clickRow(1);
+    clickRow(2);
+    expect(within(panel).getByLabelText("New value").tagName).toBe("INPUT");
+    fireEvent.change(within(panel).getByRole("combobox", { name: /Field/ }), { target: { value: "country" } });
+    expect(within(panel).getByLabelText("New value").getAttribute("list")).toBe(cell(1, "country").getAttribute("list"));
   });
 
   it("creates rows from a template", async () => {

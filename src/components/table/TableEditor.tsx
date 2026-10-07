@@ -1,5 +1,5 @@
 import { displayName } from "../../lib/table/fileNames";
-import { memo, useCallback, useEffect, useRef, useState, type KeyboardEvent, type MouseEvent } from "react";
+import { memo, useCallback, useEffect, useId, useRef, useState, type KeyboardEvent, type MouseEvent } from "react";
 import { headerOf, type DataRow, type Row } from "../../lib/formats/csvTable";
 import type { BackupEntry, FileEntry } from "../../lib/fs";
 import { useShortcutsRef, type ActionId } from "../../lib/shortcuts";
@@ -61,6 +61,7 @@ export function TableEditor<Ctx>({ file, store, ui, confirmOverwrite, onSaved, f
   const { fields } = schema.format;
   const { item, items, file: fileLabel, files: filesLabel } = schema.labels;
   const ctx = store.getContext();
+  const listPrefix = useId();
   const [selection, setSelection] = useState<Selection>(EMPTY_SELECTION);
   const [panel, setPanel] = useState<Panel>(null);
   const { error, status, setStatus, saving, save, discard, restore: stageBackup } = useFileActions(
@@ -345,9 +346,11 @@ export function TableEditor<Ctx>({ file, store, ui, confirmOverwrite, onSaved, f
             <AddOptionPanel prompt={addType.add.prompt} onAdd={finishAdd} onCancel={() => setAdding(null)} />
           )}
 
+          <SuggestionLists ui={ui} records={records} prefix={listPrefix} />
           <BulkEditPanel
             ui={ui}
             ctx={ctx}
+            listPrefix={listPrefix}
             count={selectedRecords.length}
             sampleValues={selectedRecords[0]?.values ?? fields.map(() => "")}
             value={bulkValue}
@@ -431,6 +434,7 @@ export function TableEditor<Ctx>({ file, store, ui, confirmOverwrite, onSaved, f
                   key={r.id}
                   ui={ui}
                   ctx={ctx}
+                  listPrefix={listPrefix}
                   row={r}
                   index={i}
                   errors={errors.get(r.id)}
@@ -458,6 +462,8 @@ export function TableEditor<Ctx>({ file, store, ui, confirmOverwrite, onSaved, f
 interface GridRowProps<Ctx> {
   ui: TableUI<Ctx>;
   ctx: Ctx;
+  /** Prefix of the suggestion <datalist> ids (see SuggestionLists). */
+  listPrefix: string;
   row: Row;
   index: number;
   errors: RowErrors | undefined;
@@ -479,7 +485,7 @@ const sameErrors = (a: RowErrors | undefined, b: RowErrors | undefined) =>
   a === b || JSON.stringify(a ?? {}) === JSON.stringify(b ?? {});
 
 function GridRowImpl<Ctx>(props: GridRowProps<Ctx>) {
-  const { ui, ctx, row, index, errors, original, selected, readOnly, focusCol } = props;
+  const { ui, ctx, listPrefix, row, index, errors, original, selected, readOnly, focusCol } = props;
   const { onCell, onRowHead, onCellKey, onCellFocus, onCellBlur, onRequestAdd } = props;
   const fields = ui.schema.format.fields;
   const extras = ui.extraColumns ?? [];
@@ -510,7 +516,7 @@ function GridRowImpl<Ctx>(props: GridRowProps<Ctx>) {
         fields.map((f, col) => {
           const error = errors?.[f];
           const was = original && original[col] !== row.values[col] ? original[col] : undefined;
-          const type = ui.cell(col);
+          const type = ui.cell(col, row.values);
           const random = type.kind === "text" && type.random && row.values[col] === "random";
           return [
             <td
@@ -535,6 +541,7 @@ function GridRowImpl<Ctx>(props: GridRowProps<Ctx>) {
                 onFocus={() => onCellFocus(row.id, col)}
                 onBlur={() => onCellBlur(row.id, col, row.values[col])}
                 onRequestAdd={() => onRequestAdd(row.id, col)}
+                listId={`${listPrefix}-${col}`}
               />
             </td>,
             ...extras
@@ -556,6 +563,7 @@ const GridRow = memo(
   (a, b) =>
     a.row === b.row &&
     a.ctx === b.ctx &&
+    a.listPrefix === b.listPrefix &&
     a.index === b.index &&
     a.original === b.original &&
     a.selected === b.selected &&
@@ -617,6 +625,7 @@ function AddOptionPanel({ prompt, onAdd, onCancel }: { prompt: string; onAdd: (v
 function BulkEditPanel<Ctx>({
   ui,
   ctx,
+  listPrefix,
   count,
   sampleValues,
   value,
@@ -626,6 +635,7 @@ function BulkEditPanel<Ctx>({
 }: {
   ui: TableUI<Ctx>;
   ctx: Ctx;
+  listPrefix: string;
   count: number;
   /** A selected row's values, for dropdowns whose options depend on the row. */
   sampleValues: readonly string[];
@@ -636,7 +646,7 @@ function BulkEditPanel<Ctx>({
 }) {
   const fields = ui.schema.format.fields;
   const [col, setCol] = useState(ui.bulkDefaultCol);
-  const type: CellType<Ctx> = ui.cell(col);
+  const type: CellType<Ctx> = ui.cell(col, sampleValues);
   // Dependent dropdowns stay usable here even if the sample row disables them.
   // The typed value is shown as-is, not as a display view.
   const panelType: CellType<Ctx> =
@@ -672,6 +682,7 @@ function BulkEditPanel<Ctx>({
           className="panel-input"
           onChange={onValue}
           onRequestAdd={() => onRequestAdd(col)}
+          listId={`${listPrefix}-${col}`}
         />
       </label>
       <button disabled={count === 0} onClick={() => onApply(col, value)}>
@@ -679,6 +690,27 @@ function BulkEditPanel<Ctx>({
       </button>
       {count === 0 && <span className="muted">Select rows by clicking their numbers (Shift for a range, Ctrl to add).</span>}
     </section>
+  );
+}
+
+/** One <datalist> per `suggest` text column: its base values, then the others used in the file. */
+function SuggestionLists<Ctx>({ ui, records, prefix }: { ui: TableUI<Ctx>; records: readonly DataRow[]; prefix: string }) {
+  return (
+    <>
+      {ui.schema.format.fields.map((_, col) => {
+        const type = ui.cell(col);
+        if (type.kind !== "text" || !type.suggest) return null;
+        const values = new Set(type.suggest.base);
+        for (const r of records) if (r.values[col] !== "") values.add(r.values[col]);
+        return (
+          <datalist key={col} id={`${prefix}-${col}`}>
+            {[...values].map((v) => (
+              <option key={v} value={v} />
+            ))}
+          </datalist>
+        );
+      })}
+    </>
   );
 }
 
