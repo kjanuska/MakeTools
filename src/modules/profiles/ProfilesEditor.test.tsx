@@ -600,6 +600,7 @@ describe("files with changes or errors", () => {
 
     fireEvent.click(items[0]);
     await screen.findByRole("heading", { name: "g" });
+    await screen.findByLabelText("Row 1 city");
     expect(cell(1, "city").value).toBe("Rockford");
   });
 

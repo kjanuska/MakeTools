@@ -251,15 +251,31 @@ describe("a click draws the new page's frame first; the slow part comes right af
     expect(f[f.length - 1]).toEqual({ head: true, table: true });
   });
 
-  it("a quick open never shows the spinner", async () => {
+  it("the loader is in the first frame the click draws, until the rows are in", async () => {
     backend();
     await start();
     const f = await framesOf(screen.getByRole("button", { name: fileItem("g.csv") }), {
-      busy: () => !!busy(),
-      spinner: () => !!spinner(),
+      loader: () => !!busy() && !!spinner() && !!screen.queryByText("Loading g…"),
+      rows: () => !!$(".grid tbody tr"),
     });
-    expect(f.some((x) => x.busy)).toBe(true);
-    expect(f.some((x) => x.spinner)).toBe(false);
+    expect(f[0]).toEqual({ loader: true, rows: false });
+    expect(f[f.length - 1]).toEqual({ loader: false, rows: true });
+  });
+
+  it("every module's file view shows the loader first", async () => {
+    backend();
+    await start();
+    for (const [module, file] of [
+      ["Tasks", "t.csv"],
+      ["Proxies", "p.txt"],
+      ["Accounts", "a.txt"],
+    ]) {
+      fireEvent.click(nav(module));
+      const item = await screen.findByRole("button", { name: fileItem(file) });
+      const f = await framesOf(item, { loader: () => !!spinner() });
+      expect(f[0], module).toEqual({ loader: true });
+      expect(f[f.length - 1], module).toEqual({ loader: false });
+    }
   });
 });
 
@@ -350,34 +366,31 @@ describe("a file that takes a while to read: its heading at once, a spinner afte
 });
 
 describe("LoadingNote and LoadingPanel", () => {
-  beforeEach(() => vi.useFakeTimers());
-  afterEach(() => vi.useRealTimers());
-
-  it("the note is empty at first, and shows the spinner after the delay (150 ms)", () => {
+  it("the note has the spinner and label from its first frame, faded in by CSS after the delay (150 ms)", () => {
     render(<LoadingNote label="g" />);
     expect(busy()).toBeTruthy();
-    act(() => vi.advanceTimersByTime(SPINNER_DELAY_MS - 1));
-    expect(screen.queryByText("Loading g…")).toBeNull();
-    expect(spinner()).toBeNull();
-    act(() => vi.advanceTimersByTime(1));
     expect(screen.getByText("Loading g…")).toBeTruthy();
-    expect(spinner()).toBeTruthy();
+    expect(spinner()?.className).toBe("spinner large");
+    // A CSS animation, not a timer, so it still shows while the app is busy drawing.
+    expect((busy() as HTMLElement).style.getPropertyValue("--loading-delay")).toBe(`${SPINNER_DELAY_MS}ms`);
   });
 
-  it("a note gone before the delay leaves no timer behind", () => {
-    const { unmount } = render(<LoadingNote label="g" />);
-    unmount();
-    expect(vi.getTimerCount()).toBe(0);
+  it("the note sets no timers", () => {
+    vi.useFakeTimers();
+    try {
+      render(<LoadingNote label="g" />);
+      expect(vi.getTimerCount()).toBe(0);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
-  it("the panel shows the heading and back button at once", () => {
+  it("the panel shows the heading, back button and loader at once", () => {
     const onBack = vi.fn();
     render(<LoadingPanel name="g" back={{ label: "← All groups", onClick: onBack }} />);
     expect(screen.getByRole("heading", { name: "g" })).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "← All groups" }));
     expect(onBack).toHaveBeenCalledOnce();
-    expect(spinner()).toBeNull();
-    act(() => vi.advanceTimersByTime(SPINNER_DELAY_MS));
     expect(spinner()).toBeTruthy();
   });
 
@@ -385,13 +398,37 @@ describe("LoadingNote and LoadingPanel", () => {
     render(<LoadingPanel name="g" error="not found" />);
     expect(screen.getByText("Couldn't read file: not found")).toBeTruthy();
     expect(busy()).toBeNull();
-    act(() => vi.advanceTimersByTime(SPINNER_DELAY_MS * 2));
     expect(spinner()).toBeNull();
   });
 });
 
-describe("useFirstPaintDone and AfterFirstPaint", () => {
-  it("is false on the first render, then true", () => {
+/** Animation frames wait until paint() runs them, as the browser runs them just before it paints. */
+let frameQueue: (FrameRequestCallback | null)[] = [];
+
+function holdFrames() {
+  frameQueue = [];
+  vi.stubGlobal("requestAnimationFrame", (cb: FrameRequestCallback) => frameQueue.push(cb));
+  vi.stubGlobal("cancelAnimationFrame", (id: number) => (frameQueue[id - 1] = null));
+}
+
+/** The browser paints: the waiting frames run, then whatever they scheduled for just after. */
+async function paint() {
+  await act(async () => {
+    const queued = frameQueue;
+    frameQueue = [];
+    for (const cb of queued) cb?.(0);
+    await new Promise((r) => setTimeout(r, 0));
+  });
+}
+
+/** Lets timers and promises run without a paint. */
+const tick = () => act(() => new Promise((r) => setTimeout(r, 20)));
+
+describe("useFirstPaintDone and AfterFirstPaint: the slow part waits until the loader is on screen", () => {
+  beforeEach(holdFrames);
+  afterEach(() => vi.unstubAllGlobals());
+
+  it("is false until the first frame is painted, then true", async () => {
     const seen: boolean[] = [];
     function Probe() {
       const done = useFirstPaintDone();
@@ -399,29 +436,42 @@ describe("useFirstPaintDone and AfterFirstPaint", () => {
       return <p>{done ? "drawn" : "loading"}</p>;
     }
     render(<Probe />);
-    expect(seen[0]).toBe(false);
+    await tick();
+    expect(seen.every((d) => !d)).toBe(true);
+    await paint();
     expect(seen[seen.length - 1]).toBe(true);
     expect(screen.getByText("drawn")).toBeTruthy();
   });
 
-  it("draws its children only after the first commit", () => {
-    const drawn: boolean[] = [];
-    function Slow() {
-      return <p>slow part</p>;
-    }
+  it("draws its children only after the loader was painted", async () => {
     render(
-      <Profiler id="t" onRender={() => drawn.push(!!screen.queryByText("slow part"))}>
-        <AfterFirstPaint label="x">
-          <Slow />
-        </AfterFirstPaint>
-      </Profiler>,
+      <AfterFirstPaint label="x">
+        <p>slow part</p>
+      </AfterFirstPaint>,
     );
-    expect(drawn[0]).toBe(false);
-    expect(drawn[drawn.length - 1]).toBe(true);
+    await tick();
+    expect(screen.queryByText("slow part")).toBeNull();
+    expect(screen.getByText("Loading x…")).toBeTruthy();
+    await paint();
+    expect(screen.getByText("slow part")).toBeTruthy();
+    expect(screen.queryByText("Loading x…")).toBeNull();
+  });
+
+  it("a page closed before the paint leaves nothing waiting", async () => {
+    const { unmount } = render(
+      <AfterFirstPaint label="x">
+        <p>slow part</p>
+      </AfterFirstPaint>,
+    );
+    unmount();
+    expect(frameQueue.every((cb) => cb === null)).toBe(true);
   });
 });
 
 describe("useFileLoad: the one way a view opens its file", () => {
+  beforeEach(holdFrames);
+  afterEach(() => vi.unstubAllGlobals());
+
   /** A store whose reads finish when the test says so. */
   class FakeSource implements FileSource<string> {
     entries = new Map<string, string>();
@@ -477,21 +527,25 @@ describe("useFileLoad: the one way a view opens its file", () => {
     expect(screen.getByText("frame")).toBeTruthy();
   });
 
-  it("once read: a frame with the entry first, then ready", async () => {
+  it("once read: the frame with the entry first, then ready once that's painted", async () => {
     const source = new FakeSource();
     const { seen } = renderProbe(source, fileA);
     seen.length = 0;
     await act(async () => source.pending.get(fileA.path)!({ text: "A" }));
-    expect(seen[0]).toEqual({ entry: "A", error: undefined, ready: false });
+    await tick();
+    expect(seen.length).toBeGreaterThan(0);
+    expect(seen.every((s) => s.entry === "A" && !s.ready)).toBe(true);
+    await paint();
     expect(seen[seen.length - 1]).toEqual({ entry: "A", error: undefined, ready: true });
     expect(screen.getByText("body A")).toBeTruthy();
   });
 
-  it("a file already in memory still draws the frame first", () => {
+  it("a file already in memory still draws the frame first", async () => {
     const source = new FakeSource();
     source.entries.set(fileA.path, "A");
     const { seen } = renderProbe(source, fileA);
     expect(seen[0]).toEqual({ entry: "A", error: undefined, ready: false });
+    await paint();
     expect(seen[seen.length - 1].ready).toBe(true);
     // It's still re-read, in case it changed on disk.
     expect(source.loads).toEqual([fileA.path]);
@@ -501,6 +555,7 @@ describe("useFileLoad: the one way a view opens its file", () => {
     const source = new FakeSource();
     const { seen } = renderProbe(source, fileA);
     await act(async () => source.pending.get(fileA.path)!({ error: "denied" }));
+    await paint();
     expect(seen[seen.length - 1]).toEqual({ entry: undefined, error: "denied", ready: false });
     expect(screen.getByText("error denied")).toBeTruthy();
   });
@@ -510,18 +565,35 @@ describe("useFileLoad: the one way a view opens its file", () => {
     source.entries.set(fileA.path, "A");
     source.errors.set(fileA.path, "denied");
     const { seen } = renderProbe(source, fileA);
+    await paint();
     expect(seen[seen.length - 1]).toEqual({ entry: "A", error: undefined, ready: true });
   });
 
-  it("another file: read that one, and not ready until it's in", async () => {
+  it("another file: read that one, and not ready until it's in and painted", async () => {
     const source = new FakeSource();
     source.entries.set(fileA.path, "A");
     const { seen, rerender } = renderProbe(source, fileA);
+    await paint();
     seen.length = 0;
     rerender(fileB);
     expect(source.loads).toEqual([fileA.path, fileB.path]);
     expect(seen.every((s) => !s.ready)).toBe(true);
     await act(async () => source.pending.get(fileB.path)!({ text: "B" }));
+    expect(seen[seen.length - 1]).toEqual({ entry: "B", error: undefined, ready: false });
+    await paint();
+    expect(seen[seen.length - 1]).toEqual({ entry: "B", error: undefined, ready: true });
+  });
+
+  it("switching between two files already in memory: not ready again until the new one is painted", async () => {
+    const source = new FakeSource();
+    source.entries.set(fileA.path, "A");
+    source.entries.set(fileB.path, "B");
+    const { seen, rerender } = renderProbe(source, fileA);
+    await paint();
+    seen.length = 0;
+    rerender(fileB);
+    expect(seen[0]).toEqual({ entry: "B", error: undefined, ready: false });
+    await paint();
     expect(seen[seen.length - 1]).toEqual({ entry: "B", error: undefined, ready: true });
   });
 

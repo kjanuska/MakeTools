@@ -416,6 +416,7 @@ describe("big files stay responsive", () => {
     expect(listed()).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: fileItem("p") }));
     await screen.findByRole("heading", { name: "p" });
+    await screen.findByRole("textbox", { name: "Proxy list" });
     expect(editor().value).toBe(`${A}\n${B}`);
   });
 

@@ -152,6 +152,7 @@ describe("changed cells", () => {
     await screen.findByRole("heading", { name: "h" });
     fireEvent.click(screen.getByRole("button", { name: fileItem("g") }));
     await screen.findByRole("heading", { name: "g" });
+    await screen.findByLabelText("Row 1 city");
     expect(td(1, "city").className).toContain("changed");
   });
 });

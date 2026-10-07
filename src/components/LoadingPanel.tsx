@@ -1,32 +1,33 @@
 // Keeps navigation instant. A click shows the new page's frame (heading, back
-// button, toolbar) straight away. The slow part (a big grid, the counts, an
-// overview) is drawn just after, and it gets a spinner only if that takes
-// longer than SPINNER_DELAY_MS, so quick opens don't flash one.
+// button, toolbar) straight away, with a loader where the slow part goes. The
+// slow part (a big grid, the counts, an overview) is drawn only once that
+// frame is on screen, so the loader is always seen while it's drawn. The
+// loader fades in after SPINNER_DELAY_MS, so quick opens don't flash it. The
+// delay and the spinning are CSS animations, so they keep going while the app
+// is busy drawing.
 //
 // Every file view opens its file through useFileLoad, the one way in:
 //   - not read yet: LoadingPanel (heading, back button, then the spinner or the read error)
 //   - read, `ready` false: the view's frame, with a LoadingNote where the slow part goes
 //   - `ready`: everything
-import { useDeferredValue, useEffect, useState, useSyncExternalStore, type ReactNode } from "react";
+import { startTransition, useEffect, useState, useSyncExternalStore, type CSSProperties, type ReactNode } from "react";
 import type { FileEntry } from "../lib/fs";
 
-/** The spinner only shows if loading takes longer than this, so quick opens don't flash it. */
+/** The loader fades in after this, so quick opens don't flash it. */
 export const SPINNER_DELAY_MS = 150;
 
-/** Where a page's content goes while it's loading: empty at first, "Loading …" with a spinner after the delay. */
+/** Where a page's content goes while it's loading: a spinner and "Loading …", faded in after the delay. */
 export function LoadingNote({ label }: { label: string }) {
-  const [slow, setSlow] = useState(false);
-  useEffect(() => {
-    const t = setTimeout(() => setSlow(true), SPINNER_DELAY_MS);
-    return () => clearTimeout(t);
-  }, []);
   return (
-    <div className="loading-region" aria-busy="true">
-      {slow && (
-        <p className="loading" aria-live="polite">
-          <span className="spinner" aria-hidden="true" /> Loading {label}…
-        </p>
-      )}
+    <div
+      className="loading-region"
+      aria-busy="true"
+      style={{ "--loading-delay": `${SPINNER_DELAY_MS}ms` } as CSSProperties}
+    >
+      <p className="loading" aria-live="polite">
+        <span className="spinner large" aria-hidden="true" />
+        Loading {label}…
+      </p>
     </div>
   );
 }
@@ -54,12 +55,31 @@ export function LoadingPanel({ name, error, back }: PanelProps) {
 }
 
 /**
- * False on a view's first render, then true in a background render. A view
- * that's slow to draw shows its frame and a LoadingNote first, so the click
- * that opened it shows at once instead of waiting until it's all drawn.
+ * True once the browser has painted a frame showing `key` (false while it's
+ * null). A view that's slow to draw shows its frame and a LoadingNote first,
+ * and draws the slow part only after that's on screen. The switch happens in
+ * a transition, so a click while the slow part is drawn still goes through.
  */
+export function usePainted(key: string | null): boolean {
+  const [painted, setPainted] = useState<string | null>(null);
+  useEffect(() => {
+    if (key === null) return;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    // An animation frame runs just before the paint; a timeout set in it runs just after.
+    const frame = requestAnimationFrame(() => {
+      timer = setTimeout(() => startTransition(() => setPainted(key)));
+    });
+    return () => {
+      cancelAnimationFrame(frame);
+      clearTimeout(timer);
+    };
+  }, [key]);
+  return key !== null && painted === key;
+}
+
+/** False on a view's first render, then true once that's on screen. */
 export function useFirstPaintDone(): boolean {
-  return useDeferredValue(true, false);
+  return usePainted("");
 }
 
 /** Draws its children just after the first paint, with a LoadingNote until then. Give it a key per page. */
@@ -97,11 +117,7 @@ export function useFileLoad<E>(source: FileSource<E>, file: FileEntry): FileLoad
     void source.load(file);
   }, [source, file]);
   const entry = source.get(file.path);
-  // False when the file is first there to draw, then true in a background render.
-  const ready = useDeferredValue(entry !== undefined, false);
-  return {
-    entry,
-    error: entry === undefined ? source.loadError(file.path) : undefined,
-    ready: ready && entry !== undefined,
-  };
+  // False when the file is first there to draw, then true once its frame is on screen.
+  const ready = usePainted(entry !== undefined ? file.path : null);
+  return { entry, error: entry === undefined ? source.loadError(file.path) : undefined, ready };
 }
