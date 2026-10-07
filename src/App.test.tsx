@@ -167,7 +167,7 @@ describe("folder selection", () => {
     expect(document.querySelector(".file-list")).toBeTruthy();
   });
 
-  it("puts Updates first in Settings, with its icon and the app version", async () => {
+  it("puts Updates first in Settings, without an icon, with the app version", async () => {
     backend();
     render(<App />);
     fireEvent.click(await screen.findByRole("button", { name: "Settings" }));
@@ -176,7 +176,7 @@ describe("folder selection", () => {
     expect(sections[0]).toBe("Updates");
     expect(sections[1]).toBe("Makebot folder");
     const updates = screen.getByRole("region", { name: "Updates" });
-    expect(within(updates).getByRole("heading", { name: "Updates" }).querySelector("svg.update-icon")).toBeTruthy();
+    expect(within(updates).getByRole("heading", { name: "Updates" }).querySelector("svg")).toBeNull();
     expect(await within(updates).findByText("Version 0.1.72")).toBeTruthy();
   });
 });
