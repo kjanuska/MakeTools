@@ -8,6 +8,7 @@ import { PROFILE_HEADER } from "../../lib/formats/profiles";
 import type { FileEntry } from "../../lib/fs";
 import { getMakebotPath, setMakebotPath } from "../../lib/settings";
 import { guardWindowClose } from "../../lib/window";
+import { INITIAL_ROWS } from "../../components/table/VirtualBody";
 
 vi.mock("../../lib/settings", () => ({
   getMakebotPath: vi.fn(),
@@ -699,5 +700,48 @@ describe("closing with unsaved changes", () => {
     fireEvent.click(button("Change folder…"));
     await waitFor(() => expect(setMakebotPath).toHaveBeenCalledWith("D:\\Other"));
     expect(within(changes()).getByText("None")).toBeTruthy();
+  });
+});
+
+describe("big files (only the rows in view are drawn)", { timeout: 15000 }, () => {
+  const BIG = 1000;
+  const bigFile = () => `${H}\r\n${Array.from({ length: BIG }, (_, i) => `${row(String(i + 1))}\r\n`).join("")}`;
+  const drawnRows = () => screen.queryAllByRole("rowheader").filter((th) => /^Row \d+$/.test(th.getAttribute("aria-label") ?? ""));
+
+  it("draws only the first rows, but counts and selects them all", async () => {
+    backend({ "g.csv": bigFile() });
+    await open();
+    expect(screen.getByText(new RegExp(`${BIG.toLocaleString("en-US")} profiles|${BIG} profiles`))).toBeTruthy();
+    expect(drawnRows().length).toBeGreaterThan(0);
+    expect(drawnRows().length).toBeLessThanOrEqual(INITIAL_ROWS);
+    expect(screen.queryByLabelText(`Row ${BIG} profileName`)).toBeNull();
+    fireEvent.click(screen.getByRole("columnheader", { name: "Select all rows" }));
+    expect(status()).toContain(`${BIG} selected`);
+  });
+
+  it("Down from the last drawn row draws and focuses the next one", async () => {
+    backend({ "g.csv": bigFile() });
+    await open();
+    const n = drawnRows().length;
+    expect(screen.queryByLabelText(`Row ${n + 1} city`)).toBeNull();
+    const last = cell(n, "city");
+    last.focus();
+    fireEvent.keyDown(last, { key: "ArrowDown" });
+    await waitFor(() => expect(document.activeElement).toBe(cell(n + 1, "city")), { timeout: 5000 });
+  });
+
+  it("Add row draws the new last row and focuses it", async () => {
+    backend({ "g.csv": bigFile() });
+    await open();
+    fireEvent.click(button("Add row"));
+    await waitFor(() => expect(document.activeElement).toBe(cell(BIG + 1, "firstName")), { timeout: 5000 });
+  });
+
+  it("an edit saves every row, drawn or not, byte-exact", async () => {
+    const { saves } = backend({ "g.csv": bigFile() });
+    await open();
+    type(2, "city", "Chicago");
+    await save();
+    expect(saves[0].text).toBe(bigFile().replace(`${row("2")}\r\n`, `${row("2", { city: "Chicago" })}\r\n`));
   });
 });

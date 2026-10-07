@@ -1,5 +1,5 @@
 import { displayName } from "../../lib/table/fileNames";
-import { memo, useCallback, useEffect, useId, useRef, useState, type KeyboardEvent, type MouseEvent } from "react";
+import { memo, useCallback, useDeferredValue, useEffect, useId, useMemo, useRef, useState, type KeyboardEvent, type MouseEvent } from "react";
 import { headerOf, type DataRow, type Row } from "../../lib/formats/csvTable";
 import type { BackupEntry, FileEntry } from "../../lib/fs";
 import { useShortcutsRef, type ActionId } from "../../lib/shortcuts";
@@ -20,6 +20,7 @@ import { LoadingNote, LoadingPanel, useFileLoad } from "../LoadingPanel";
 import { BackupsMenu } from "./BackupsMenu";
 import { useFileActions } from "./useFileActions";
 import { Cell } from "./cells";
+import { VirtualBody, type VirtualHandle } from "./VirtualBody";
 import type { CellType, TableUI } from "./types";
 
 interface Props<Ctx> {
@@ -77,12 +78,18 @@ export function TableEditor<Ctx>({ file, store, ui, confirmOverwrite, onSaved, f
   const [bulkValue, setBulkValue] = useState("");
   const rootRef = useRef<HTMLDivElement>(null);
   const gridRef = useRef<HTMLTableElement>(null);
+  /** The grid's body, which draws only the rows in view in a big file. */
+  const body = useRef<VirtualHandle>(null);
   const highlighted = useRef(false);
   /** Row index whose first editable cell gets focus after the next render (Add row). */
   const focusRow = useRef<number | null>(null);
   const shortcutHandlers = useRef<Partial<Record<ActionId, () => void>>>({});
   useShortcutsRef(shortcutHandlers);
   const doc = entry?.doc;
+  const rowCount = useRef(0);
+  rowCount.current = doc?.rows.length ?? 0;
+  // The suggestion lists cover every row, so they catch up after typing instead of slowing it.
+  const suggestRecords = useDeferredValue(useMemo(() => doc?.rows.filter(isRecord) ?? [], [doc]));
 
   // Drop selected ids whose rows are gone (deleted, or the file was re-read).
   useEffect(() => {
@@ -104,18 +111,22 @@ export function TableEditor<Ctx>({ file, store, ui, confirmOverwrite, onSaved, f
     const i = doc.rows.findIndex((r) => r.id === highlightId);
     if (i < 0) return;
     setSelection({ ids: new Set([highlightId]), anchor: highlightId });
-    const input = gridRef.current?.querySelector<HTMLElement>(`[data-row="${i}"][data-col="0"]`);
-    input?.scrollIntoView?.({ block: "center" });
-    input?.focus();
+    body.current?.reveal(i, () => {
+      const input = gridRef.current?.querySelector<HTMLElement>(`[data-row="${i}"][data-col="0"]`);
+      input?.scrollIntoView?.({ block: "center" });
+      input?.focus();
+    });
   }, [doc, ready, highlightId]);
 
   useEffect(() => {
     if (focusRow.current === null) return;
     const i = focusRow.current;
     focusRow.current = null;
-    const input = gridRef.current?.querySelector<HTMLElement>(`[data-row="${i}"][data-col="${ui.firstEditCol}"]`);
-    input?.scrollIntoView?.({ block: "nearest" });
-    input?.focus();
+    body.current?.reveal(i, () => {
+      const input = gridRef.current?.querySelector<HTMLElement>(`[data-row="${i}"][data-col="${ui.firstEditCol}"]`);
+      input?.scrollIntoView?.({ block: "nearest" });
+      input?.focus();
+    });
   }, [doc, ui.firstEditCol]);
 
   const edit = useCallback(
@@ -192,10 +203,16 @@ export function TableEditor<Ctx>({ file, store, ui, confirmOverwrite, onSaved, f
     else if (!ownsArrows && e.key === "ArrowDown") delta = 1;
     else if (!ownsArrows && e.key === "ArrowUp") delta = -1;
     if (!delta) return;
-    const target = gridRef.current?.querySelector<HTMLElement>(`[data-row="${rowIndex + delta}"][data-col="${col}"]`);
+    const next = rowIndex + delta;
+    const find = () => gridRef.current?.querySelector<HTMLElement>(`[data-row="${next}"][data-col="${col}"]`);
+    const target = find();
     if (target) {
       e.preventDefault();
       target.focus();
+    } else if (next >= 0 && next < rowCount.current) {
+      // A row of a big file that isn't drawn yet.
+      e.preventDefault();
+      body.current?.reveal(next, () => find()?.focus());
     }
   }, []);
 
@@ -338,7 +355,7 @@ export function TableEditor<Ctx>({ file, store, ui, confirmOverwrite, onSaved, f
             <AddOptionPanel prompt={addType.add.prompt} onAdd={finishAdd} onCancel={() => setAdding(null)} />
           )}
 
-          <SuggestionLists ui={ui} records={records} prefix={listPrefix} />
+          <SuggestionLists ui={ui} records={suggestRecords} prefix={listPrefix} />
           <BulkEditPanel
             ui={ui}
             ctx={ctx}
@@ -420,8 +437,11 @@ export function TableEditor<Ctx>({ file, store, ui, confirmOverwrite, onSaved, f
                 ])}
               </tr>
             </thead>
-            <tbody>
-              {doc.rows.map((r, i) => (
+            <VirtualBody
+              items={doc.rows}
+              colSpan={1 + fields.length + extras.length}
+              handle={body}
+              renderRow={(r, i) => (
                 <GridRow
                   key={r.id}
                   ui={ui}
@@ -441,8 +461,8 @@ export function TableEditor<Ctx>({ file, store, ui, confirmOverwrite, onSaved, f
                   onCellBlur={onCellBlur}
                   onRequestAdd={onRequestAdd}
                 />
-              ))}
-            </tbody>
+              )}
+            />
           </table>
           {doc.rows.length === 0 && <p className="muted">This {fileLabel} is empty.</p>}
         </div>
@@ -686,7 +706,7 @@ function BulkEditPanel<Ctx>({
 }
 
 /** One <datalist> per `suggest` text column: its base values, then the others used in the file. */
-function SuggestionLists<Ctx>({ ui, records, prefix }: { ui: TableUI<Ctx>; records: readonly DataRow[]; prefix: string }) {
+function SuggestionListsImpl<Ctx>({ ui, records, prefix }: { ui: TableUI<Ctx>; records: readonly DataRow[]; prefix: string }) {
   return (
     <>
       {ui.schema.format.fields.map((_, col) => {
@@ -705,6 +725,8 @@ function SuggestionLists<Ctx>({ ui, records, prefix }: { ui: TableUI<Ctx>; recor
     </>
   );
 }
+
+const SuggestionLists = memo(SuggestionListsImpl) as typeof SuggestionListsImpl;
 
 function TemplatePanel({
   item,

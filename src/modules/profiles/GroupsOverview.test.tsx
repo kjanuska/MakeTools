@@ -295,6 +295,19 @@ describe("finding profiles", () => {
     expect(screen.getByText("No profiles match.")).toBeTruthy();
   });
 
+  it("opening a match far down a big group draws, selects and focuses that row", async () => {
+    const big = Array.from({ length: 900 }, (_, i) => row(`b${i + 1}`));
+    backend({ ...FILES, "big.csv": file(big) });
+    await openOverview();
+    fireEvent.change(screen.getByLabelText("Find by profileName"), { target: { value: "b850" } });
+    fireEvent.click(within(screen.getByRole("table", { name: "Matches" })).getByRole("button", { name: "b850" }));
+    await screen.findByRole("heading", { name: "big" });
+    await waitFor(() => expect(document.activeElement?.getAttribute("aria-label")).toBe("Row 850 profileName"), { timeout: 10000 });
+    expect(screen.getByRole("status").textContent).toContain("1 selected");
+    // The top of the file isn't drawn (a selector, as a label search over a big grid is slow in tests).
+    expect(document.querySelector('[aria-label="Row 1 profileName"]')).toBeNull();
+  }, 15000);
+
   it("opening a match selects that row in its group", async () => {
     backend(FILES);
     await openOverview();

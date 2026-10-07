@@ -130,18 +130,41 @@ export function allocate(
  * count times, spread out as evenly as possible (e.g. [2,1] → 0,1,0).
  */
 export function interleave(counts: readonly number[]): number[] {
+  // Each step, every index gains its count and the one with the most (the
+  // lowest index on a tie) is taken and loses `total`. After `step` steps an
+  // index with count c taken k times has (step + 1) * c - total * k.
+  //
+  // Indexes with the same count only differ by k, so among them the next one
+  // taken is always the lowest index taken least: they take turns in index
+  // order. So each step only compares the next index of each distinct count.
+  // Same order as comparing every index, but fast for thousands of profiles
+  // that share a few counts (a big group's ALL rows).
   const total = counts.reduce((a, b) => a + b, 0);
-  const current = counts.map(() => 0);
+  const byCount = new Map<number, number[]>();
+  counts.forEach((c, i) => {
+    if (c <= 0) return;
+    const same = byCount.get(c);
+    if (same) same.push(i);
+    else byCount.set(c, [i]);
+  });
+  const groups = [...byCount].map(([count, indexes]) => ({ count, indexes, taken: 0 }));
   const out: number[] = [];
   for (let step = 0; step < total; step++) {
-    let best = -1;
-    counts.forEach((c, i) => {
-      if (c <= 0) return;
-      current[i] += c;
-      if (best < 0 || current[i] > current[best]) best = i;
-    });
-    current[best] -= total;
-    out.push(best);
+    let best: (typeof groups)[number] | null = null;
+    let bestIndex = -1;
+    let bestValue = 0;
+    for (const g of groups) {
+      const n = g.indexes.length;
+      const index = g.indexes[g.taken % n];
+      const value = (step + 1) * g.count - total * Math.floor(g.taken / n);
+      if (!best || value > bestValue || (value === bestValue && index < bestIndex)) {
+        best = g;
+        bestIndex = index;
+        bestValue = value;
+      }
+    }
+    best!.taken++;
+    out.push(bestIndex);
   }
   return out;
 }
@@ -260,13 +283,18 @@ export function generateRows(plan: BuildPlan): string[][] {
       (i) => keys.map((ks) => ks.reduce((a, key) => a + (carry[i].get(key) ?? 0), 0)),
     );
     profiles.forEach((_, i) => {
+      // Tasks this profile got of each field value, in one pass over the combinations.
+      const got = SPLIT_FIELDS.map(() => new Map<string, number>());
+      combos.forEach((c, cj) => {
+        if (table[i][cj] === 0) return;
+        c.values.forEach((v, f) => got[f].set(v, (got[f].get(v) ?? 0) + table[i][cj]));
+      });
       SPLIT_FIELDS.forEach((_, f) => {
         const split = marginals[f][k];
         effectiveSplit(plan, input, SPLIT_FIELDS[f]).forEach((p, j) => {
           const key = `${f}:${p.value}`;
           const target = inputCounts[k] ? (byInput[i][k] * split[j]) / inputCounts[k] : 0;
-          const got = combos.reduce((a, c, cj) => a + (c.values[f] === p.value ? table[i][cj] : 0), 0);
-          carry[i].set(key, (carry[i].get(key) ?? 0) + target - got);
+          carry[i].set(key, (carry[i].get(key) ?? 0) + target - (got[f].get(p.value) ?? 0));
         });
       });
     });

@@ -2,9 +2,10 @@
 // Importing appends lines through save_text and restoring goes through
 // restore_backup; both back up the current file first. Nothing else is written.
 import { useState } from "react";
-import { accountsOf, appendLines, hasProxy, oddLines, parseAccounts, planImport } from "../../lib/formats/accounts";
+import { accountsOf, appendLines, hasProxy, oddLines, parseAccounts, planImport, type Account } from "../../lib/formats/accounts";
 import { LoadingNote, useFileLoad } from "../../components/LoadingPanel";
 import { BackupsMenu } from "../../components/table/BackupsMenu";
+import { VIRTUAL_MIN_ROWS, VirtualBody } from "../../components/table/VirtualBody";
 import { confirmAction } from "../../lib/dialogs";
 import { formatDateTime } from "../../lib/format";
 import { readText, restoreBackup, saveText, type BackupEntry, type FileEntry } from "../../lib/fs";
@@ -28,6 +29,19 @@ type ProxyFilter = "with" | "without" | null;
 const TOP_DOMAINS = 6;
 
 const domainLabel = (d: string) => d || "(no domain)";
+
+/** The longest value in each column, in characters (header included). */
+function columnWidths(accounts: readonly Account[], lineCount: number, anyAuth: boolean): number[] {
+  const w = [Math.max(4, String(lineCount).length), 5, 8, 5, 10, 14];
+  for (const a of accounts) {
+    w[1] = Math.max(w[1], a.email.length);
+    w[2] = Math.max(w[2], a.password.length);
+    if (hasProxy(a)) w[3] = Math.max(w[3], `${a.proxyHost}:${a.proxyPort}`.length);
+    w[4] = Math.max(w[4], a.proxyUser?.length ?? 0);
+    w[5] = Math.max(w[5], a.proxyPass?.length ?? 0);
+  }
+  return anyAuth ? w : w.slice(0, 4);
+}
 
 export function AccountFileView({ file, store, onBack, onChanged }: Props) {
   // The accounts are drawn once `ready`, so the header shows at once and a big group fills in after.
@@ -154,6 +168,9 @@ export function AccountFileView({ file, store, onBack, onChanged }: Props) {
   });
   const odd = oddLines(doc);
   const anyAuth = accountsOf(doc).some((a) => a.proxyUser !== undefined);
+  // A big group only draws the rows in view, so its columns are sized for every row up front
+  // (otherwise they'd change width while scrolling).
+  const widths = accountsOf(doc).length > VIRTUAL_MIN_ROWS ? columnWidths(accountsOf(doc), doc.lines.length, anyAuth) : null;
   const filtered = proxyFilter !== null || domainFilter.size > 0;
   const toggleProxy = (f: "with" | "without") => setProxyFilter((cur) => (cur === f ? null : f));
   const toggleDomain = (d: string) =>
@@ -289,11 +306,21 @@ export function AccountFileView({ file, store, onBack, onChanged }: Props) {
                   {anyAuth && <th>Proxy password</th>}
                 </tr>
               </thead>
-              <tbody>
-                {shown.map((l) => {
+              {widths && (
+                <colgroup>
+                  {widths.map((w, i) => (
+                    <col key={i} style={{ width: `calc(${w}ch + 28px)` }} />
+                  ))}
+                </colgroup>
+              )}
+              <VirtualBody
+                items={shown}
+                colSpan={anyAuth ? 6 : 4}
+                renderRow={(l, i) => {
                   const a = l.account;
+                  const classes = [i % 2 === 1 && "stripe", newFrom !== null && l.line >= newFrom && "new-account"];
                   return (
-                    <tr key={l.line} className={newFrom !== null && l.line >= newFrom ? "new-account" : undefined}>
+                    <tr key={l.line} className={classes.filter(Boolean).join(" ") || undefined}>
                       <td className="num muted">{l.line}</td>
                       <td className="copyable">{a.email}</td>
                       <td className="copyable mono">{a.password}</td>
@@ -304,8 +331,8 @@ export function AccountFileView({ file, store, onBack, onChanged }: Props) {
                       {anyAuth && <td className="copyable mono">{a.proxyPass ?? <span className="muted">—</span>}</td>}
                     </tr>
                   );
-                })}
-              </tbody>
+                }}
+              />
             </table>
             {shown.length === 0 && <p className="muted">No accounts match.</p>}
           </div>

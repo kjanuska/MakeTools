@@ -176,7 +176,7 @@ button.accounts-card.selectable[aria-pressed="true"] .muted {
   border-bottom: none;
 }
 
-.accounts-table tbody tr:nth-child(even) td {
+.accounts-table tbody tr.stripe td {
   background: color-mix(in srgb, var(--panel) 60%, transparent);
 }
 

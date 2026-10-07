@@ -358,3 +358,40 @@ describe("importing accounts", () => {
     expect((screen.getByLabelText("Accounts to import") as HTMLTextAreaElement).value).toBe("b@x.com:p");
   });
 });
+
+describe("big account groups (only the rows in view are drawn)", { timeout: 15000 }, () => {
+  const BIG = 1000;
+  const bigGroup = () =>
+    Array.from({ length: BIG }, (_, i) => `user${i + 1}@gmail.com:pw${i + 1}:10.0.0.${i % 250}:8080\r\n`).join("");
+
+  it("draws only the first rows, with the counts of all of them", async () => {
+    backend({ [`${ACC}\\big.txt`]: bigGroup() });
+    await openGroup("big");
+    const rows = accountRows();
+    expect(rows.length).toBeGreaterThan(0);
+    expect(rows.length).toBeLessThan(BIG);
+    expect(rows[0]).toEqual(["1", "user1@gmail.com", "pw1", "10.0.0.0:8080"]);
+    expect(screen.getByText(`${BIG} accounts`)).toBeTruthy();
+  });
+
+  it("search finds an account that isn't drawn yet", async () => {
+    backend({ [`${ACC}\\big.txt`]: bigGroup() });
+    await openGroup("big");
+    fireEvent.change(screen.getByLabelText("Search accounts"), { target: { value: "user987@" } });
+    expect(accountRows()).toEqual([["987", "user987@gmail.com", "pw987", "10.0.0.236:8080"]]);
+  });
+
+  it("sizes the columns for every row, so they don't change width while scrolling", async () => {
+    backend({ [`${ACC}\\big.txt`]: `${bigGroup()}a-much-longer-address-at-the-end@example.com:p\r\n` });
+    await openGroup("big");
+    const cols = [...screen.getByRole("table", { name: "Accounts" }).querySelectorAll("col")].map((c) => c.style.width);
+    expect(cols[1]).toBe(`calc(${"a-much-longer-address-at-the-end@example.com".length}ch + 28px)`);
+  });
+
+  it("stripes rows by their place in the list, not by what's drawn", async () => {
+    backend({ [`${ACC}\\big.txt`]: bigGroup() });
+    await openGroup("big");
+    const trs = within(screen.getByRole("table", { name: "Accounts" })).getAllByRole("row").slice(1, 5);
+    expect(trs.map((tr) => tr.classList.contains("stripe"))).toEqual([false, true, false, true]);
+  });
+});

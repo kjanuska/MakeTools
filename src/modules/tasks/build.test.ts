@@ -133,6 +133,53 @@ describe("interleave", () => {
     expect(seq.filter((i) => i === 2)).toHaveLength(1);
     expect(seq.slice(0, 2)).toEqual([0, 1]);
   });
+
+  /** The original version, which compares every index each step. */
+  function reference(counts: readonly number[]): number[] {
+    const total = counts.reduce((a, b) => a + b, 0);
+    const current = counts.map(() => 0);
+    const out: number[] = [];
+    for (let step = 0; step < total; step++) {
+      let best = -1;
+      counts.forEach((c, i) => {
+        if (c <= 0) return;
+        current[i] += c;
+        if (best < 0 || current[i] > current[best]) best = i;
+      });
+      current[best] -= total;
+      out.push(best);
+    }
+    return out;
+  }
+
+  it("gives exactly the same order as comparing every index", () => {
+    // Deterministic pseudo-random counts, many of them shared.
+    let seed = 12345;
+    const rand = (n: number) => {
+      seed = (seed * 1103515245 + 12345) % 2147483648;
+      return seed % n;
+    };
+    for (let run = 0; run < 3000; run++) {
+      const n = 1 + rand(12);
+      const distinct = Array.from({ length: 1 + rand(4) }, () => rand(9));
+      const counts = Array.from({ length: n }, () => distinct[rand(distinct.length)]);
+      expect(interleave(counts), JSON.stringify(counts)).toEqual(reference(counts));
+    }
+    for (const counts of [[], [0], [0, 0], [5], [3, 3, 3], [1, 2, 3, 4, 5], [7, 0, 7, 1, 0, 7]]) {
+      expect(interleave(counts), JSON.stringify(counts)).toEqual(reference(counts));
+    }
+  });
+
+  it("is fast for thousands of indexes that share a count", () => {
+    const counts = Array.from({ length: 5000 }, (_, i) => (i % 3 === 0 ? 40 : 41));
+    const start = performance.now();
+    const seq = interleave(counts);
+    expect(performance.now() - start).toBeLessThan(2000);
+    expect(seq).toHaveLength(counts.reduce((a, b) => a + b, 0));
+    const taken = new Map<number, number>();
+    for (const i of seq) taken.set(i, (taken.get(i) ?? 0) + 1);
+    expect(counts.every((c, i) => taken.get(i) === c)).toBe(true);
+  });
 });
 
 describe("generateRows", () => {
