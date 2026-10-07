@@ -32,6 +32,7 @@ import { useStoreVersion } from "./lib/table/store";
 import { guardWindowClose } from "./lib/window";
 import { AccountFileView } from "./modules/accounts/AccountFileView";
 import { AccountsOverview } from "./modules/accounts/AccountsOverview";
+import { AccountStore } from "./modules/accounts/store";
 import { GroupsOverview } from "./modules/profiles/GroupsOverview";
 import { ProfilesEditor } from "./modules/profiles/ProfilesEditor";
 import { confirmOverwrite } from "./modules/profiles/prompts";
@@ -70,6 +71,7 @@ export default function App() {
   const [profileStore] = useState(() => new ProfileStore());
   const [taskStore] = useState(() => new TaskStore());
   const [proxyStore] = useState(() => new ProxyStore());
+  const [accountStore] = useState(() => new AccountStore());
   const [savingAll, setSavingAll] = useState(false);
   const [changesMessage, setChangesMessage] = useState<string | null>(null);
   // Row to jump to when a file is opened from the overview search.
@@ -289,7 +291,7 @@ export default function App() {
 
   /** Clicking the current module again goes back to its overview. */
   const [menuConfigs] = useState(() =>
-    fileMenuConfigs({ profiles: profileStore, proxies: proxyStore, tasks: taskStore }),
+    fileMenuConfigs({ accounts: accountStore, profiles: profileStore, proxies: proxyStore, tasks: taskStore }),
   );
   const fileMenu = useFileMenu({
     config: menuConfigs[moduleId],
@@ -475,6 +477,7 @@ export default function App() {
       <AccountFileView
         key={selected.path}
         file={selected}
+        store={accountStore}
         onBack={() => setSelected(null)}
         onChanged={() => setListVersion((v) => v + 1)}
       />

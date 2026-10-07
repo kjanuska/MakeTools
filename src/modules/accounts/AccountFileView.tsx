@@ -1,9 +1,9 @@
 // One account group: its accounts as a table, with counts, search and import.
 // Importing appends lines through save_text and restoring goes through
 // restore_backup; both back up the current file first. Nothing else is written.
-import { useCallback, useDeferredValue, useEffect, useState } from "react";
-import { accountsOf, appendLines, hasProxy, oddLines, parseAccounts, planImport, type AccountsDoc } from "../../lib/formats/accounts";
-import { LoadingNote } from "../../components/LoadingPanel";
+import { useState } from "react";
+import { accountsOf, appendLines, hasProxy, oddLines, parseAccounts, planImport } from "../../lib/formats/accounts";
+import { LoadingNote, useFileLoad } from "../../components/LoadingPanel";
 import { BackupsMenu } from "../../components/table/BackupsMenu";
 import { confirmAction } from "../../lib/dialogs";
 import { formatDateTime } from "../../lib/format";
@@ -11,11 +11,13 @@ import { readText, restoreBackup, saveText, type BackupEntry, type FileEntry } f
 import { useShortcuts } from "../../lib/shortcuts";
 import { displayName, groupNameOf } from "../../lib/table/fileNames";
 import { ImportPanel } from "./ImportPanel";
+import type { AccountStore } from "./store";
 import { accountStats, domainOf, plural } from "./stats";
 import "./accounts.css";
 
 interface Props {
   file: FileEntry;
+  store: AccountStore;
   onBack: () => void;
   /** Called after the file on disk changed. */
   onChanged: () => void;
@@ -27,11 +29,10 @@ const TOP_DOMAINS = 6;
 
 const domainLabel = (d: string) => d || "(no domain)";
 
-export function AccountFileView({ file, onBack, onChanged }: Props) {
-  const [loadedDoc, setDoc] = useState<AccountsDoc | null>(null);
-  // Drawn in a background render, so the header shows at once and a big group fills in after.
-  const doc = useDeferredValue(loadedDoc);
-  const [loadError, setLoadError] = useState<string | null>(null);
+export function AccountFileView({ file, store, onBack, onChanged }: Props) {
+  // The accounts are drawn once `ready`, so the header shows at once and a big group fills in after.
+  const { entry, error: loadError, ready } = useFileLoad(store, file);
+  const doc = ready ? entry!.doc : null;
   const [importing, setImporting] = useState(false);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
@@ -45,21 +46,6 @@ export function AccountFileView({ file, onBack, onChanged }: Props) {
   useShortcuts({ backups: () => setBackupsOpen((o) => !o) });
   // Lines from here on were just imported, and are marked.
   const [newFrom, setNewFrom] = useState<number | null>(null);
-
-  const load = useCallback(async () => {
-    setLoadError(null);
-    try {
-      const { text } = await readText(file.path);
-      setDoc(parseAccounts(text));
-    } catch (e) {
-      setDoc(null);
-      setLoadError(String(e));
-    }
-  }, [file.path]);
-
-  useEffect(() => {
-    void load();
-  }, [load]);
 
   const name = groupNameOf(file.name, ".txt");
 
@@ -83,7 +69,7 @@ export function AccountFileView({ file, onBack, onChanged }: Props) {
       );
       setNewFrom(current.lines.length + 1);
       setImporting(false);
-      await load();
+      await store.load(file);
       onChanged();
       return true;
     } catch (e) {
@@ -111,7 +97,7 @@ export function AccountFileView({ file, onBack, onChanged }: Props) {
       setMessage(`Restored the backup from ${when}.`);
       setBackupsOpen(false);
       setNewFrom(null);
-      await load();
+      await store.load(file);
       onChanged();
     } catch (e) {
       setError(`Restore failed: ${e}`);

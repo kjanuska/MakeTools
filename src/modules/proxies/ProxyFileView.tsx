@@ -8,7 +8,7 @@
 // shuffle, discard, a backup, leaving the editor, Save all, closing).
 import { displayName } from "../../lib/table/fileNames";
 import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
-import { LoadingPanel } from "../../components/LoadingPanel";
+import { LoadingNote, LoadingPanel, useFileLoad } from "../../components/LoadingPanel";
 import { BackupsMenu } from "../../components/table/BackupsMenu";
 import { useFileActions } from "../../components/table/useFileActions";
 import {
@@ -21,7 +21,7 @@ import {
 } from "../../lib/formats/proxies";
 import type { BackupEntry, FileEntry } from "../../lib/fs";
 import { useShortcutsRef, type ActionId } from "../../lib/shortcuts";
-import { useStoreVersion, type ConfirmOverwrite } from "../../lib/table/store";
+import type { ConfirmOverwrite } from "../../lib/table/store";
 import type { ProxyStore } from "./store";
 
 interface Props {
@@ -42,7 +42,8 @@ const ODD_SHOWN = 100;
 export const PENDING_MS = 300;
 
 export function ProxyFileView({ file, store, confirmOverwrite, onSaved }: Props) {
-  useStoreVersion(store);
+  // The text box and odd lines are drawn once `ready`, so the header and toolbar show at once.
+  const { entry, error: loadError, ready } = useFileLoad(store, file);
   const [backupsOpen, setBackupsOpen] = useState(false);
   const actions = useFileActions(store, file, confirmOverwrite, onSaved);
   const { error, status, setStatus, saving } = actions;
@@ -51,11 +52,6 @@ export function ProxyFileView({ file, store, confirmOverwrite, onSaved }: Props)
   const editorRef = useRef<HTMLTextAreaElement>(null);
   const gutterRef = useRef<HTMLPreElement>(null);
 
-  useEffect(() => {
-    void store.load(file);
-  }, [store, file]);
-
-  const entry = store.get(file.path);
   const storeText = useMemo(() => (entry ? toEditorText(entry.text) : null), [entry?.text]);
   const savedText = useMemo(() => (entry ? toEditorText(entry.loaded.text) : null), [entry?.loaded.text]);
 
@@ -104,7 +100,6 @@ export function ProxyFileView({ file, store, confirmOverwrite, onSaved }: Props)
 
   if (!entry || draft === null) {
     handlersRef.current = {};
-    const loadError = store.loadError(file.path);
     return <LoadingPanel name={displayName(file.name)} error={loadError} />;
   }
 
@@ -198,43 +193,47 @@ export function ProxyFileView({ file, store, confirmOverwrite, onSaved }: Props)
         {status && <span className="status"> · {status}</span>}
       </p>
 
-      <div className="proxy-layout">
-        <div className="proxy-editor">
-          <pre className="proxy-gutter" ref={gutterRef} aria-hidden="true">
-            {gutter}
-          </pre>
-          <textarea
-            ref={editorRef}
-            aria-label="Proxy list"
-            value={text}
-            onChange={(e) => edit(e.target.value)}
-            onBlur={flush}
-            onScroll={syncGutter}
-            wrap="off"
-            spellCheck={false}
-            autoComplete="off"
-            placeholder={"One proxy per line:\nhost:port:user:pass\nhost:port"}
-          />
-        </div>
+      {!ready ? (
+        <LoadingNote label={displayName(file.name)} />
+      ) : (
+        <div className="proxy-layout">
+          <div className="proxy-editor">
+            <pre className="proxy-gutter" ref={gutterRef} aria-hidden="true">
+              {gutter}
+            </pre>
+            <textarea
+              ref={editorRef}
+              aria-label="Proxy list"
+              value={text}
+              onChange={(e) => edit(e.target.value)}
+              onBlur={flush}
+              onScroll={syncGutter}
+              wrap="off"
+              spellCheck={false}
+              autoComplete="off"
+              placeholder={"One proxy per line:\nhost:port:user:pass\nhost:port"}
+            />
+          </div>
 
-        {odd.length > 0 && (
-          <section className="proxy-odd-section" aria-label="Odd lines">
-            <h3>Odd lines</h3>
-            <p className="muted">Not host:port or host:port:user:pass. They're still saved as they are.</p>
-            <ul className="proxy-odd">
-              {odd.slice(0, ODD_SHOWN).map((o) => (
-                <li key={o.line}>
-                  <button className="link" onClick={() => goToLine(o.line)}>
-                    Line {o.line}
-                  </button>
-                  : {o.problem}
-                </li>
-              ))}
-              {odd.length > ODD_SHOWN && <li className="muted">…and {odd.length - ODD_SHOWN} more</li>}
-            </ul>
-          </section>
-        )}
-      </div>
+          {odd.length > 0 && (
+            <section className="proxy-odd-section" aria-label="Odd lines">
+              <h3>Odd lines</h3>
+              <p className="muted">Not host:port or host:port:user:pass. They're still saved as they are.</p>
+              <ul className="proxy-odd">
+                {odd.slice(0, ODD_SHOWN).map((o) => (
+                  <li key={o.line}>
+                    <button className="link" onClick={() => goToLine(o.line)}>
+                      Line {o.line}
+                    </button>
+                    : {o.problem}
+                  </li>
+                ))}
+                {odd.length > ODD_SHOWN && <li className="muted">…and {odd.length - ODD_SHOWN} more</li>}
+              </ul>
+            </section>
+          )}
+        </div>
+      )}
     </div>
   );
 }

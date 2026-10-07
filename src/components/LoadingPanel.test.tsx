@@ -9,7 +9,15 @@ import type { FileEntry } from "../lib/fs";
 import { getMakebotPath } from "../lib/settings";
 import { guardWindowClose } from "../lib/window";
 import { fileItem } from "../test/fileList";
-import { AfterFirstPaint, LoadingNote, LoadingPanel, SPINNER_DELAY_MS, useFirstPaintDone } from "./LoadingPanel";
+import {
+  AfterFirstPaint,
+  LoadingNote,
+  LoadingPanel,
+  SPINNER_DELAY_MS,
+  useFileLoad,
+  useFirstPaintDone,
+  type FileSource,
+} from "./LoadingPanel";
 
 vi.mock("../lib/settings", () => ({
   getMakebotPath: vi.fn(),
@@ -209,6 +217,40 @@ describe("a click draws the new page's frame first; the slow part comes right af
     expect(f[f.length - 1]).toEqual({ head: true, table: true });
   });
 
+  it("opening a proxy file: header and Save, then the list", async () => {
+    backend();
+    await start();
+    fireEvent.click(nav("Proxies"));
+    const file = await screen.findByRole("button", { name: fileItem("p.txt") });
+    // Read once, so this checks the frame-then-body step, not the read.
+    fireEvent.click(file);
+    await screen.findByRole("textbox", { name: "Proxy list" });
+    fireEvent.click(nav("Proxies"));
+    const again = await screen.findByRole("button", { name: fileItem("p.txt") });
+    const f = await framesOf(again, {
+      head: () => heading() === "p" && !!screen.queryByRole("button", { name: "Shuffle" }),
+      list: () => !!screen.queryByRole("textbox", { name: "Proxy list" }),
+    });
+    expect(f[0]).toEqual({ head: true, list: false });
+    expect(f[f.length - 1]).toEqual({ head: true, list: true });
+  });
+
+  it("reopening an account group: it's kept in memory, so the header and Import show at once, then the accounts", async () => {
+    backend();
+    await start();
+    fireEvent.click(nav("Accounts"));
+    fireEvent.click(await screen.findByRole("button", { name: fileItem("a.txt") }));
+    await screen.findByRole("table", { name: "Accounts" });
+    fireEvent.click(screen.getByRole("button", { name: "← All account groups" }));
+    const again = await screen.findByRole("button", { name: fileItem("a.txt") });
+    const f = await framesOf(again, {
+      head: () => !!screen.queryByRole("button", { name: "Import accounts…" }),
+      table: () => !!screen.queryByRole("table", { name: "Accounts" }),
+    });
+    expect(f[0]).toEqual({ head: true, table: false });
+    expect(f[f.length - 1]).toEqual({ head: true, table: true });
+  });
+
   it("a quick open never shows the spinner", async () => {
     backend();
     await start();
@@ -269,6 +311,29 @@ describe("a file that takes a while to read: its heading at once, a spinner afte
     expect(await screen.findByText("Loading p…")).toBeTruthy();
     release();
     expect(await screen.findByRole("textbox", { name: "Proxy list" })).toBeTruthy();
+    expect(busy()).toBeNull();
+  });
+
+  it("an account group that can't be read shows the error under its header, not a spinner", async () => {
+    backend((p) => {
+      if (p.endsWith("a.txt")) throw "Access is denied. (os error 5)";
+      return FILES[p];
+    });
+    await openIn("Accounts", "a.txt");
+    expect(await screen.findByText("Couldn't read file: Access is denied. (os error 5)")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Import accounts…" })).toBeTruthy();
+    expect(spinner()).toBeNull();
+    expect(busy()).toBeNull();
+  });
+
+  it("a proxy file that can't be read shows the error, not a spinner", async () => {
+    backend((p) => {
+      if (p.endsWith("p.txt")) throw "Access is denied. (os error 5)";
+      return FILES[p];
+    });
+    await openIn("Proxies", "p.txt");
+    expect(await screen.findByText("Couldn't read file: Access is denied. (os error 5)")).toBeTruthy();
+    expect(spinner()).toBeNull();
     expect(busy()).toBeNull();
   });
 
@@ -354,4 +419,121 @@ describe("useFirstPaintDone and AfterFirstPaint", () => {
     expect(drawn[0]).toBe(false);
     expect(drawn[drawn.length - 1]).toBe(true);
   });
+});
+
+describe("useFileLoad: the one way a view opens its file", () => {
+  /** A store whose reads finish when the test says so. */
+  class FakeSource implements FileSource<string> {
+    entries = new Map<string, string>();
+    errors = new Map<string, string>();
+    loads: string[] = [];
+    pending = new Map<string, (r: { text?: string; error?: string }) => void>();
+    private listeners = new Set<() => void>();
+    private version = 0;
+    subscribe = (fn: () => void) => {
+      this.listeners.add(fn);
+      return () => this.listeners.delete(fn);
+    };
+    getVersion = () => this.version;
+    load(file: FileEntry): Promise<void> {
+      this.loads.push(file.path);
+      return new Promise((done) =>
+        this.pending.set(file.path, ({ text, error }) => {
+          if (text !== undefined) this.entries.set(file.path, text);
+          if (error !== undefined) this.errors.set(file.path, error);
+          this.version++;
+          for (const fn of this.listeners) fn();
+          done();
+        }),
+      );
+    }
+    get(path: string) {
+      return this.entries.get(path);
+    }
+    loadError(path: string) {
+      return this.errors.get(path);
+    }
+  }
+
+  const fileA: FileEntry = { name: "a.txt", path: "C:\\x\\a.txt", size: 1, modifiedMs: 1 };
+  const fileB: FileEntry = { name: "b.txt", path: "C:\\x\\b.txt", size: 1, modifiedMs: 1 };
+
+  function renderProbe(source: FakeSource, file: FileEntry) {
+    const seen: { entry: string | undefined; error: string | undefined; ready: boolean }[] = [];
+    function Probe({ file }: { file: FileEntry }) {
+      const r = useFileLoad(source, file);
+      seen.push(r);
+      return <p>{r.ready ? `body ${r.entry}` : r.error ? `error ${r.error}` : "frame"}</p>;
+    }
+    const view = render(<Probe file={file} />);
+    return { seen, rerender: (f: FileEntry) => view.rerender(<Probe file={f} />) };
+  }
+
+  it("starts the read; nothing to draw until it's in", () => {
+    const source = new FakeSource();
+    const { seen } = renderProbe(source, fileA);
+    expect(source.loads).toEqual([fileA.path]);
+    expect(seen.every((s) => s.entry === undefined && !s.ready && s.error === undefined)).toBe(true);
+    expect(screen.getByText("frame")).toBeTruthy();
+  });
+
+  it("once read: a frame with the entry first, then ready", async () => {
+    const source = new FakeSource();
+    const { seen } = renderProbe(source, fileA);
+    seen.length = 0;
+    await act(async () => source.pending.get(fileA.path)!({ text: "A" }));
+    expect(seen[0]).toEqual({ entry: "A", error: undefined, ready: false });
+    expect(seen[seen.length - 1]).toEqual({ entry: "A", error: undefined, ready: true });
+    expect(screen.getByText("body A")).toBeTruthy();
+  });
+
+  it("a file already in memory still draws the frame first", () => {
+    const source = new FakeSource();
+    source.entries.set(fileA.path, "A");
+    const { seen } = renderProbe(source, fileA);
+    expect(seen[0]).toEqual({ entry: "A", error: undefined, ready: false });
+    expect(seen[seen.length - 1].ready).toBe(true);
+    // It's still re-read, in case it changed on disk.
+    expect(source.loads).toEqual([fileA.path]);
+  });
+
+  it("a read error is passed on, and it's never ready", async () => {
+    const source = new FakeSource();
+    const { seen } = renderProbe(source, fileA);
+    await act(async () => source.pending.get(fileA.path)!({ error: "denied" }));
+    expect(seen[seen.length - 1]).toEqual({ entry: undefined, error: "denied", ready: false });
+    expect(screen.getByText("error denied")).toBeTruthy();
+  });
+
+  it("an error is hidden while the store still holds the file", async () => {
+    const source = new FakeSource();
+    source.entries.set(fileA.path, "A");
+    source.errors.set(fileA.path, "denied");
+    const { seen } = renderProbe(source, fileA);
+    expect(seen[seen.length - 1]).toEqual({ entry: "A", error: undefined, ready: true });
+  });
+
+  it("another file: read that one, and not ready until it's in", async () => {
+    const source = new FakeSource();
+    source.entries.set(fileA.path, "A");
+    const { seen, rerender } = renderProbe(source, fileA);
+    seen.length = 0;
+    rerender(fileB);
+    expect(source.loads).toEqual([fileA.path, fileB.path]);
+    expect(seen.every((s) => !s.ready)).toBe(true);
+    await act(async () => source.pending.get(fileB.path)!({ text: "B" }));
+    expect(seen[seen.length - 1]).toEqual({ entry: "B", error: undefined, ready: true });
+  });
+
+  it("stops listening when the view closes", () => {
+    const source = new FakeSource();
+    const view = render(<Unmountable source={source} />);
+    view.unmount();
+    expect(() => source.pending.get(fileA.path)!({ text: "A" })).not.toThrow();
+  });
+
+  function Unmountable({ source }: { source: FakeSource }) {
+    useFileLoad(source, fileA);
+    return null;
+  }
 });

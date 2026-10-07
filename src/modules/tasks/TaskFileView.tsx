@@ -2,7 +2,7 @@
 // the builder that regenerates it, or the raw rows in the shared table editor.
 import { displayName } from "../../lib/table/fileNames";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { LoadingNote, LoadingPanel, useFirstPaintDone } from "../../components/LoadingPanel";
+import { LoadingNote, LoadingPanel, useFileLoad } from "../../components/LoadingPanel";
 import { BackupsMenu } from "../../components/table/BackupsMenu";
 import { TableEditor } from "../../components/table/TableEditor";
 import type { TableUI } from "../../components/table/types";
@@ -11,7 +11,7 @@ import { headerOf } from "../../lib/formats/csvTable";
 import type { BackupEntry, FileEntry } from "../../lib/fs";
 import { useShortcutsRef, type ActionId } from "../../lib/shortcuts";
 import { isRecord, replaceRecords } from "../../lib/table/ops";
-import { useStoreVersion, type ConfirmOverwrite, type TableStore } from "../../lib/table/store";
+import type { ConfirmOverwrite, TableStore } from "../../lib/table/store";
 import { BreakdownView } from "./BreakdownView";
 import { breakdown, inferPlan, type BuildPlan } from "./build";
 import type { TaskContext } from "./schema";
@@ -70,7 +70,8 @@ const VIEWS: [View, string][] = [
 
 export function TaskFileView(props: Props) {
   const { file, store, ui, confirmOverwrite, onSaved, onBack, highlightId } = props;
-  useStoreVersion(store);
+  // The counts and builder are worked out and drawn once `ready`, so the header and toolbar show at once.
+  const { entry, error: loadError, ready } = useFileLoad(store, file);
   const [view, setViewState] = useState<View>(highlightId === undefined ? (lastView.get(file.path) ?? "tasks") : "raw");
   const setView = (v: View) => {
     lastView.set(file.path, v);
@@ -91,16 +92,8 @@ export function TaskFileView(props: Props) {
   );
   const handlersRef = useRef<Partial<Record<ActionId, () => void>>>({});
   useShortcutsRef(handlersRef);
-  // The counts and builder are worked out and drawn after a first paint, so the header and toolbar show at once.
-  const painted = useFirstPaintDone();
-
-  useEffect(() => {
-    void store.load(file);
-  }, [store, file]);
-
-  const entry = store.get(file.path);
   const ctx = store.getContext();
-  const doc = painted ? entry?.doc : undefined;
+  const doc = ready ? entry?.doc : undefined;
   const records = useMemo(() => doc?.rows.filter(isRecord).map((r) => r.values) ?? [], [doc]);
   const summary = useMemo(() => breakdown(records, ctx), [records, ctx]);
   const plan = useMemo(() => {
@@ -134,7 +127,7 @@ export function TaskFileView(props: Props) {
     return (
       <LoadingPanel
         name={displayName(file.name)}
-        error={store.loadError(file.path)}
+        error={loadError}
         back={{ label: "← All task files", onClick: onBack }}
       />
     );
@@ -204,7 +197,7 @@ export function TaskFileView(props: Props) {
         )}
       </div>
 
-      {!painted ? (
+      {!ready ? (
         <LoadingNote label={displayName(file.name)} />
       ) : readOnly ? (
         <BreakdownView b={summary} />

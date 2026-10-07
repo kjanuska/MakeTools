@@ -5,12 +5,14 @@ import { countProxies, parseProxies } from "../lib/formats/proxies";
 import { parseTasks } from "../lib/formats/tasks";
 import type { ModuleId } from "../lib/modules";
 import { isRecord } from "../lib/table/ops";
+import type { AccountStore } from "../modules/accounts/store";
 import type { ProfileStore } from "../modules/profiles/store";
 import type { ProxyStore } from "../modules/proxies/store";
 import type { TaskStore } from "../modules/tasks/store";
 import { plural, TASK_COLUMNS, type FileMenuConfig } from "./useFileMenu";
 
 export function fileMenuConfigs(stores: {
+  accounts: AccountStore;
   profiles: ProfileStore;
   proxies: ProxyStore;
   tasks: TaskStore;
@@ -20,6 +22,7 @@ export function fileMenuConfigs(stores: {
     accounts: {
       label: "account file",
       ext: ".txt",
+      store: stores.accounts,
       describe: (t) => plural(accountsOf(parseAccounts(t)).length, "account", "accounts"),
       usedBy: TASK_COLUMNS.accountGroup,
     },

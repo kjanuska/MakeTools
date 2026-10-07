@@ -15,8 +15,8 @@ import {
   updateRows,
   type ImportResult,
 } from "../../lib/table/ops";
-import { useStoreVersion, type ConfirmOverwrite, type TableStore } from "../../lib/table/store";
-import { LoadingNote, LoadingPanel, useFirstPaintDone } from "../LoadingPanel";
+import type { ConfirmOverwrite, TableStore } from "../../lib/table/store";
+import { LoadingNote, LoadingPanel, useFileLoad } from "../LoadingPanel";
 import { BackupsMenu } from "./BackupsMenu";
 import { useFileActions } from "./useFileActions";
 import { Cell } from "./cells";
@@ -56,7 +56,8 @@ type AddTarget = { col: number; rowId: number | null };
 const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 
 export function TableEditor<Ctx>({ file, store, ui, confirmOverwrite, onSaved, files, onBack, highlightId }: Props<Ctx>) {
-  useStoreVersion(store);
+  // The rows are drawn once `ready`, so opening a big file shows its toolbar at once.
+  const { entry, error: loadError, ready } = useFileLoad(store, file);
   const { schema } = ui;
   const { fields } = schema.format;
   const { item, items, file: fileLabel, files: filesLabel } = schema.labels;
@@ -81,16 +82,7 @@ export function TableEditor<Ctx>({ file, store, ui, confirmOverwrite, onSaved, f
   const focusRow = useRef<number | null>(null);
   const shortcutHandlers = useRef<Partial<Record<ActionId, () => void>>>({});
   useShortcutsRef(shortcutHandlers);
-  // The rows are drawn after a first paint, so opening a big file shows its toolbar at once.
-  const painted = useFirstPaintDone();
-
-  const entry = store.get(file.path);
-  const loadError = store.loadError(file.path);
   const doc = entry?.doc;
-
-  useEffect(() => {
-    void store.load(file);
-  }, [store, file]);
 
   // Drop selected ids whose rows are gone (deleted, or the file was re-read).
   useEffect(() => {
@@ -107,7 +99,7 @@ export function TableEditor<Ctx>({ file, store, ui, confirmOverwrite, onSaved, f
 
   // Jump to the row picked in the overview search, once.
   useEffect(() => {
-    if (!doc || !painted || highlightId === undefined || highlighted.current) return;
+    if (!doc || !ready || highlightId === undefined || highlighted.current) return;
     highlighted.current = true;
     const i = doc.rows.findIndex((r) => r.id === highlightId);
     if (i < 0) return;
@@ -115,7 +107,7 @@ export function TableEditor<Ctx>({ file, store, ui, confirmOverwrite, onSaved, f
     const input = gridRef.current?.querySelector<HTMLElement>(`[data-row="${i}"][data-col="0"]`);
     input?.scrollIntoView?.({ block: "center" });
     input?.focus();
-  }, [doc, painted, highlightId]);
+  }, [doc, ready, highlightId]);
 
   useEffect(() => {
     if (focusRow.current === null) return;
@@ -340,7 +332,7 @@ export function TableEditor<Ctx>({ file, store, ui, confirmOverwrite, onSaved, f
             {dirty && <span className="unsaved"> · Unsaved changes</span>}
             {status && <span className="status"> · {status}</span>}
           </p>
-          {painted && errorCount > 0 && <ErrorList fields={fields} rows={doc.rows} errors={errors} />}
+          {ready && errorCount > 0 && <ErrorList fields={fields} rows={doc.rows} errors={errors} />}
 
           {adding && addType?.kind === "select" && addType.add && (
             <AddOptionPanel prompt={addType.add.prompt} onAdd={finishAdd} onCancel={() => setAdding(null)} />
@@ -400,7 +392,7 @@ export function TableEditor<Ctx>({ file, store, ui, confirmOverwrite, onSaved, f
         </>
       )}
 
-      {!painted ? (
+      {!ready ? (
         <LoadingNote label={displayName(file.name)} />
       ) : (
         <div className="grid-wrap">

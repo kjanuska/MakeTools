@@ -222,7 +222,7 @@ describe("rename", () => {
     fireEvent.change(input, { target: { value: "w2" } });
     fireEvent.keyDown(input, { key: "Enter" });
     expect(await screen.findByRole("heading", { name: "w2" })).toBeTruthy();
-    expect((screen.getByRole("textbox", { name: "Proxy list" }) as HTMLTextAreaElement).value).toBe(A);
+    expect(((await screen.findByRole("textbox", { name: "Proxy list" })) as HTMLTextAreaElement).value).toBe(A);
   });
 
   it("shows why a name can't be used and doesn't rename", async () => {
