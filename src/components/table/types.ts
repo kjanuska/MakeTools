@@ -6,13 +6,10 @@ import type { DocEntry } from "../../lib/table/store";
 
 export type CellType<Ctx> =
   /**
-   * Free text. `random` highlights the special value "random". `display`, when
-   * it returns something, is shown in place of the text while the cell isn't
-   * being edited; clicking into the cell shows the text to edit. `suggest`
-   * offers `base` plus the values already in this column of the file, while
-   * still accepting anything typed.
+   * Free text. `suggest` offers `base` plus the values already in this column
+   * of the file, while still accepting anything typed.
    */
-  | { kind: "text"; random?: boolean; display?: (value: string) => ReactNode; suggest?: { base: readonly string[] } }
+  | { kind: "text"; suggest?: { base: readonly string[] } }
   /** Dropdown. `add` puts an "Add…" entry at the end that creates a new option. */
   | {
       kind: "select";

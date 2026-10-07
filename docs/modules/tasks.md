@@ -36,7 +36,7 @@ These two cases are the exception to "rows you didn't edit are never changed". T
 2. **A quoted value split across lines** (e.g. `drift.csv`): if a line opens a `"` that closes on a following line, and joining those lines gives exactly 11 values, they're joined into one line. The quotes are removed and the line break becomes a space, and then the whitespace cleanup applies. Anything that doesn't fit that pattern stays as unparseable lines and is flagged.
 
 ## Fields and validation
-All rules live in `src/lib/rules/tasks.ts`, using the same engine and one-line-per-field config as profiles. The input parsing rules and the mode parts list are there too, so they're easy to change later.
+All rules live in `src/lib/rules/tasks.ts`, using the same engine and one-line-per-field config as profiles. The mode parts list is there too, so it's easy to change later.
 
 **Every field** also gets the format rule: no `,`, `"` or line breaks. Leading or trailing spaces are an error in every field except `input`, where they're cleaned up automatically. Validation errors block saving, including errors in rows you didn't edit, like profiles.
 
@@ -46,13 +46,13 @@ All rules live in `src/lib/rules/tasks.ts`, using the same engine and one-line-p
 | profileName | **dropdown**: `ALL` + the profile names in the chosen group | Disabled until a profileGroup is chosen, then defaults to `ALL`. **Error** if set without a profileGroup (e.g. hand-edited), or if the name isn't in that group. |
 | proxyGroup | **dropdown** of `proxy/*.txt` | required; must exist |
 | accountGroup | **dropdown** of `account/*.txt` | required; must exist |
-| input | text, shown as its **parsed** keywords until clicked into | required; cleaned up automatically; no classifying or lowercasing |
-| size | text; **`random` is shown distinctly** (e.g. a 🎲 random chip) | required; free string, e.g. `9&9.5&10`, `Medium&Large`, `whole` |
-| color | text; **`random` shown distinctly** | required; free string (the 2 current rows with an empty color will show as errors) |
+| input | text box showing the raw value | required; cleaned up automatically; no classifying or lowercasing |
+| size | text box showing the raw value | required; free string, e.g. `9&9.5&10`, `Medium&Large`, `whole` |
+| color | text box showing the raw value | required; free string (the 2 current rows with an empty color will show as errors) |
 | site | **dropdown** of the global site list, plus **"Add site…"** | required; must be in the list |
-| mode | **ordered multi-select** of mode parts (see Modes) | required; must split into known parts |
-| cartQuantity | **spin button** | whole number ≥ 1 |
-| delay | **spin button**, milliseconds, step 100 | whole number ≥ 0, no maximum |
+| mode | text box showing the raw value (the builder has the parts editor, see Modes) | required; must split into known parts |
+| cartQuantity | text box showing the raw value (a spin button in the builder) | whole number ≥ 1 |
+| delay | text box showing the raw value, milliseconds (a spin button in the builder, step 100) | whole number ≥ 0, no maximum |
 
 ### Links
 - The group dropdowns list the files currently in each folder, and they update when groups are created or renamed. Proxies and accounts work the same as profile groups even though those modules aren't built yet.
@@ -61,8 +61,8 @@ All rules live in `src/lib/rules/tasks.ts`, using the same engine and one-line-p
 
 ### input
 - Always treated as a **string**. It's never lowercased or sorted into keywords/variants/SKUs; uppercase codes like `A1234-123` are fine.
-- **Parsed view:** when an input contains spaces, the words are split into **positive** (no leading `-`) and **negative** (leading `-`) and shown in the input cell in place of the raw text. Clicking into the cell shows the raw text to edit; the parsed view comes back when you leave the cell.
-- The parsing rules (separator, negative prefix) live in the tasks rules config, and more input validation will be added there later.
+- Shown as its raw text. (The parsed keyword view was removed at the user's request on 2026-10-07.)
+- More input validation will be added to the tasks rules config later.
 
 ### Sites
 - A **global site list**, kept in the app's settings (not in the Makebot folder), seeded the first time with the 67 sites used in the current task files.
@@ -73,7 +73,7 @@ All rules live in `src/lib/rules/tasks.ts`, using the same engine and one-line-p
 
 ### Modes
 A mode is an **ordered list of parts joined with no separator**, e.g. `preload` + `stuck` + `wait` = `preloadstuckwait`.
-- **Editor:** an ordered multi-select. The chosen parts appear as chips in order. Parts are added from a dropdown (appended at the end), and can be removed or moved left/right.
+- **Editor (task builder only; the raw rows show the mode as plain text):** an ordered multi-select. The chosen parts appear as chips in order. Parts are added from a dropdown (appended at the end), and can be removed or moved left/right.
 - **Checking a mode:** the saved string must split fully into known parts, matching the longest part first. Any leftover text is an error. Rules about which parts can go together come later.
 - **Parts list** (in the rules config, in this order; from the bot guide unless noted):
   - Main modes: `preload`, `direct`. Also `safe`, `fast` and `human`, which the guide lists as discontinued.
@@ -105,7 +105,7 @@ Profiles and tasks are both unquoted CSVs with a fixed header. The CSV parser, t
   - During the refactor, the only change to the profiles tests was renaming the row kind "profile" to "record".
 - **Tasks code:**
   - Format and automatic fixes in `src/lib/formats/tasks.ts`.
-  - Rules, the mode parts list and input parsing in `src/lib/rules/tasks.ts`.
+  - Rules and the mode parts list in `src/lib/rules/tasks.ts`.
   - Link checks and task counts in `src/modules/tasks/schema.ts`.
   - UI config in `ui.tsx`, the site list logic in `sites.ts`, and the validation context in `context.ts`.
 - **All folders are listed up front** (profile, task, proxy, account), and every profile and task file is loaded, so links, counts and red file marks are known right away.
@@ -115,8 +115,8 @@ Profiles and tasks are both unquoted CSVs with a fixed header. The CSV parser, t
   - The cursor goes to `profileGroup`.
 - **Templates and duplicates** copy task rows exactly, since tasks have no names.
 - **"Add site…"** opens a small "New site" field above the grid. The site is added to the global list (and saved) and put in the cell.
-- **Mode editor:** clicking a mode cell opens a popover. It lists the parts in order, with ← → × buttons and an "Add part…" dropdown.
-- **Parsed view (in the input cell, no separate column):** shows positive keywords and red "−negative" keywords. Clicking into the cell shows the raw text for editing; leaving it cleans up the spaces and shows the updated view. Single-word inputs just show their text.
+- **Raw rows show raw text (2026-10-07, at the user's request):** every cell without a dropdown (input, size, color, mode, cartQuantity, delay) is a plain text box with the value exactly as in the file. There's no parsed-input view, no `random` highlight, no mode chips and no spin buttons. Bulk edit is the same. Leaving the input cell still cleans up its spaces.
+- **Mode editor (task builder):** clicking a mode value opens a popover. It lists the parts in order, with ← → × buttons and an "Add part…" dropdown. Cart quantity and delay are spin buttons there.
 - **Tasks column and counts:** `?` means the count isn't known (an unknown group). Totals show that as "(+N unknown)".
 - **Site rename:** the new site list is applied to the task checks before files are saved, so renamed tasks are valid when they're saved. A file that can't be saved (e.g. it has other errors) keeps the rename as unsaved changes, and the result message lists it.
 - **Real-file tests:**

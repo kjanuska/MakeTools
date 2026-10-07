@@ -233,6 +233,50 @@ describe("task builder", () => {
   });
 });
 
+describe("task builder: field editors", () => {
+  it("mode: adds, reorders and removes parts, keeping their order", async () => {
+    const { disk, saves } = backend({ "b.csv": taskFile([task({ name: "1", mode: "preload" })]) });
+    await openFile("b.csv");
+    const label = "Mode (all inputs) 1";
+    fireEvent.click(screen.getByLabelText(label));
+    const editor = screen.getByRole("dialog", { name: `Edit ${label}` });
+    fireEvent.change(within(editor).getByLabelText("Add part"), { target: { value: "wait" } });
+    fireEvent.change(within(editor).getByLabelText("Add part"), { target: { value: "stuck" } });
+    const chips = () => [...screen.getByLabelText(label).querySelectorAll(".chip")].map((c) => c.textContent);
+    expect(chips()).toEqual(["preload", "wait", "stuck"]);
+    fireEvent.click(within(editor).getByRole("button", { name: "Move stuck left" }));
+    fireEvent.click(within(editor).getByRole("button", { name: "Remove preload" }));
+    fireEvent.click(within(editor).getByRole("button", { name: "Done" }));
+    expect(chips()).toEqual(["stuck", "wait"]);
+    fireEvent.click(btn("Apply to file"));
+    fireEvent.click(await screen.findByRole("button", { name: "Save" }));
+    await waitFor(() => expect(saves()).toHaveLength(1));
+    expect(disk.get(`${ROOT}\\task\\b.csv`)).toBe(taskFile([task({ name: "1", mode: "stuckwait" })]));
+  });
+
+  it("mode offers every part", async () => {
+    backend({ "b.csv": taskFile([task()]) });
+    await openFile("b.csv");
+    fireEvent.click(screen.getByLabelText("Mode (all inputs) 1"));
+    const options = within(screen.getByLabelText("Add part")).getAllByRole("option").map((o) => o.textContent);
+    expect(options.slice(1)).toEqual([
+      "preload", "direct", "safe", "fast", "human", "wait", "pause", "login", "stuck",
+      "shoppay", "lite", "store", "free", "cod", "paypal", "monitor",
+    ]);
+  });
+
+  it("cart quantity and delay are spin buttons; size and color are text", async () => {
+    backend({ "b.csv": taskFile([task()]) });
+    await openFile("b.csv");
+    const qty = field("Cart Quantity (all inputs) 1");
+    expect([qty.type, qty.min, qty.step]).toEqual(["number", "1", "1"]);
+    const delay = field("Delay (ms) (all inputs) 1");
+    expect([delay.type, delay.min, delay.step]).toEqual(["number", "0", "100"]);
+    expect(field("Size (all inputs) 1").type).toBe("text");
+    expect(field("Color (all inputs) 1").type).toBe("text");
+  });
+});
+
 describe("task builder: starting again", () => {
   it("nothing to apply until the build differs; Reset goes back to the file", async () => {
     backend({ "r.csv": taskFile([task()]) });

@@ -172,63 +172,63 @@ describe("task cells", () => {
     expect(extra(1, "tasks").textContent).toBe("4");
   });
 
-  it("'random' in size and color is marked", async () => {
-    backend({ "t.csv": taskFile([task({ size: "random", color: "Black&Blue" })]) });
+  it("input, size, color, mode, cartQuantity and delay are plain text boxes showing the raw value", async () => {
+    const values = { input: "box logo -tee", size: "random", color: "Black&Blue", mode: "preloadwait", qty: "2", delay: "4500" };
+    backend({ "t.csv": taskFile([task(values)]) });
     await openTaskFile();
-    expect(td(1, "size").className).toContain("random");
-    expect(cell(1, "size").className).toContain("is-random");
-    expect(td(1, "color").className).not.toContain("random");
-    type(1, "size", "9&9.5&10");
-    expect(td(1, "size").className).not.toContain("random");
+    const fields = ["input", "size", "color", "mode", "cartQuantity", "delay"];
+    for (const f of fields) {
+      expect(cell(1, f).tagName).toBe("INPUT");
+      expect(cell(1, f).type).toBe("text");
+      expect(cell(1, f).className).toBe("cell");
+      expect(td(1, f).className).toBe(`cell-td cell-${f}`);
+      expect(td(1, f).textContent).toBe("");
+      expect(td(1, f).children).toHaveLength(1);
+    }
+    expect(fields.map((f) => cell(1, f).value)).toEqual(["box logo -tee", "random", "Black&Blue", "preloadwait", "2", "4500"]);
   });
 
-  it("cartQuantity and delay are spin buttons", async () => {
-    backend({ "t.csv": taskFile([task()]) });
+  it("a value that isn't valid is shown as typed, with its error", async () => {
+    backend({ "t.csv": taskFile([task({ mode: "preloadx", delay: "3s" })]) });
     await openTaskFile();
-    expect(cell(1, "cartQuantity").type).toBe("number");
-    expect(cell(1, "cartQuantity").min).toBe("1");
-    expect(cell(1, "delay").type).toBe("number");
-    expect(cell(1, "delay").step).toBe("100");
-    expect(cell(1, "delay").min).toBe("0");
+    expect(cell(1, "mode").value).toBe("preloadx");
+    expect(cell(1, "mode").title).toBe("mode has parts that aren't known modes");
+    expect(cell(1, "delay").value).toBe("3s");
     type(1, "cartQuantity", "0");
+    expect(cell(1, "cartQuantity").value).toBe("0");
     expect(cell(1, "cartQuantity").title).toBe("cartQuantity must be a whole number, 1 or more\nWas: 1");
   });
 
-  it("the input shows its parsed keywords until you click into it", async () => {
+  it("the input keeps its text while edited; leaving cleans the spaces", async () => {
     backend({ "t.csv": taskFile([task({ input: "box logo -tee" })]) });
     await openTaskFile();
-    const parsed = () => [...td(1, "input").querySelectorAll(".kw")].map((k) => k.textContent);
-    expect(parsed()).toEqual(["box", "logo", "−tee"]);
-    expect(cell(1, "input").className).toContain("has-display");
-    expect(screen.queryByRole("columnheader", { name: "parsed" })).toBeNull();
-    // Editing shows the raw text.
     fireEvent.focus(cell(1, "input"));
-    expect(parsed()).toEqual([]);
-    expect(cell(1, "input").className).not.toContain("has-display");
     type(1, "input", "  hoodie   -shirt  ");
-    expect(parsed()).toEqual([]);
-    // Leaving cleans the spaces and shows the new keywords.
+    expect(cell(1, "input").value).toBe("  hoodie   -shirt  ");
     fireEvent.blur(cell(1, "input"));
     expect(cell(1, "input").value).toBe("hoodie -shirt");
-    expect(parsed()).toEqual(["hoodie", "−shirt"]);
   });
 
-  it("a single-word input shows its text", async () => {
-    backend({ "t.csv": taskFile([task({ input: "AB1234-123" })]) });
+  it("an edited mode is saved as typed", async () => {
+    const { disk } = backend({ "t.csv": taskFile([task({ mode: "preload" })]) });
     await openTaskFile();
-    expect(td(1, "input").querySelector(".cell-display")).toBeNull();
-    expect(cell(1, "input").className).not.toContain("has-display");
-    expect(cell(1, "input").value).toBe("AB1234-123");
+    type(1, "mode", "stuckwait");
+    expect(cell(1, "mode").title).toBe("Was: preload");
+    fireEvent.click(btn("Save"));
+    await waitFor(() => expect(disk.get(`${ROOT}\\task\\t.csv`)).toBe(taskFile([task({ mode: "stuckwait" })])));
   });
 
-  it("bulk edit shows the typed input as text", async () => {
+  it("bulk edit shows the typed value as text", async () => {
     backend({ "t.csv": taskFile([task()]) });
     await openTaskFile();
     const panel = screen.getByRole("region", { name: "Bulk edit" });
-    fireEvent.change(within(panel).getByRole("combobox", { name: /Field/ }), { target: { value: "input" } });
-    fireEvent.change(within(panel).getByLabelText("New value"), { target: { value: "box logo" } });
-    expect((within(panel).getByLabelText("New value") as HTMLInputElement).value).toBe("box logo");
-    expect(panel.querySelector(".cell-display")).toBeNull();
+    for (const f of ["input", "mode", "delay"]) {
+      fireEvent.change(within(panel).getByRole("combobox", { name: /Field/ }), { target: { value: f } });
+      const input = within(panel).getByLabelText("New value") as HTMLInputElement;
+      expect(input.type).toBe("text");
+      fireEvent.change(input, { target: { value: "box logo" } });
+      expect(input.value).toBe("box logo");
+    }
   });
 
   it("shows tasks per row and in total", async () => {
@@ -236,36 +236,6 @@ describe("task cells", () => {
     await openTaskFile();
     expect([1, 2, 3, 4].map((n) => extra(n, "tasks").textContent)).toEqual(["3", "1", "1", "?"]);
     expect(screen.getByText(/rows ·/).textContent).toContain("4 rows · 5 tasks (+1 unknown)");
-  });
-});
-
-describe("mode editor", () => {
-  it("adds, reorders and removes parts, keeping their order", async () => {
-    const { disk } = backend({ "t.csv": taskFile([task({ mode: "preload" })]) });
-    await openTaskFile();
-    fireEvent.click(cell(1, "mode"));
-    const editor = screen.getByRole("dialog", { name: "Edit Row 1 mode" });
-    fireEvent.change(within(editor).getByLabelText("Add part"), { target: { value: "wait" } });
-    fireEvent.change(within(editor).getByLabelText("Add part"), { target: { value: "stuck" } });
-    const chips = () => [...cell(1, "mode").querySelectorAll(".chip")].map((c) => c.textContent);
-    expect(chips()).toEqual(["preload", "wait", "stuck"]);
-    fireEvent.click(within(editor).getByRole("button", { name: "Move stuck left" }));
-    fireEvent.click(within(editor).getByRole("button", { name: "Remove preload" }));
-    fireEvent.click(within(editor).getByRole("button", { name: "Done" }));
-    expect(chips()).toEqual(["stuck", "wait"]);
-    expect(cell(1, "mode").title).toBe("Was: preload");
-    fireEvent.click(btn("Save"));
-    await waitFor(() => expect(disk.get(`${ROOT}\\task\\t.csv`)).toBe(taskFile([task({ mode: "stuckwait" })])));
-  });
-
-  it("offers every part", async () => {
-    backend({ "t.csv": taskFile([task()]) });
-    await openTaskFile();
-    fireEvent.click(cell(1, "mode"));
-    expect(options(screen.getByLabelText("Add part")).slice(1)).toEqual([
-      "preload", "direct", "safe", "fast", "human", "wait", "pause", "login", "stuck",
-      "shoppay", "lite", "store", "free", "cod", "paypal", "monitor",
-    ]);
   });
 });
 

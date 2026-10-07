@@ -659,8 +659,6 @@ button.link {
 /* Task cells */
 
 :root {
-  --random: #7c3aed;
-  --random-bg: #ede9fe;
   --neg: #b91c1c;
   --neg-bg: #fee2e2;
   --chip-bg: #e5e7eb;
@@ -668,39 +666,10 @@ button.link {
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --random: #c4b5fd;
-    --random-bg: #2e2447;
     --neg: #fca5a5;
     --neg-bg: #3f1d1d;
     --chip-bg: #374151;
   }
-}
-
-/* "random" in size/color: a dice mark and purple text, so random vs a real value is obvious. */
-.grid td.random {
-  position: relative;
-  background: var(--random-bg);
-}
-
-.grid td.random::before {
-  content: "🎲";
-  position: absolute;
-  left: 4px;
-  top: 50%;
-  transform: translateY(-50%);
-  font-size: 11px;
-  pointer-events: none;
-}
-
-.grid .cell.is-random,
-.panel-input.is-random {
-  color: var(--random);
-  font-style: italic;
-  padding-left: 20px;
-}
-
-.grid .cell[type="number"] {
-  text-align: right;
 }
 
 .grid .cell-input,
@@ -721,8 +690,7 @@ button.link {
   min-width: 170px;
 }
 
-.chip,
-.kw {
+.chip {
   display: inline-block;
   padding: 0 6px;
   margin: 1px 2px 1px 0;
@@ -733,21 +701,13 @@ button.link {
   white-space: nowrap;
 }
 
-.chip.unknown,
-.kw-neg {
+.chip.unknown {
   background: var(--neg-bg);
   color: var(--neg);
 }
 
 .parts-cell {
   position: relative;
-}
-
-.grid .parts-button {
-  text-align: left;
-  white-space: nowrap;
-  overflow: hidden;
-  cursor: pointer;
 }
 
 .parts-editor {
@@ -787,28 +747,6 @@ button.link {
   padding: 2px 6px;
   color: var(--muted);
   background: var(--panel);
-}
-
-/* A text cell showing a view (e.g. parsed keywords) over its text until it's edited. */
-.display-cell {
-  position: relative;
-  height: 100%;
-}
-
-.grid .cell.has-display {
-  color: transparent;
-  cursor: text;
-}
-
-.cell-display {
-  position: absolute;
-  inset: 0;
-  display: flex;
-  align-items: center;
-  padding: 0 6px;
-  overflow: hidden;
-  white-space: nowrap;
-  pointer-events: none;
 }
 
 .grid .extra-td.num {

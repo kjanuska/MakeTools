@@ -73,7 +73,6 @@ export function TableEditor<Ctx>({ file, store, ui, confirmOverwrite, onSaved, f
     onSaved,
   );
   const [backupsOpen, setBackupsOpen] = useState(false);
-  const [focus, setFocus] = useState<{ rowId: number; col: number } | null>(null);
   const [adding, setAdding] = useState<AddTarget | null>(null);
   const [bulkValue, setBulkValue] = useState("");
   const rootRef = useRef<HTMLDivElement>(null);
@@ -154,11 +153,8 @@ export function TableEditor<Ctx>({ file, store, ui, confirmOverwrite, onSaved, f
 
   const onCell = useCallback((id: number, col: number, value: string) => setCells([id], col, value), [setCells]);
 
-  const onCellFocus = useCallback((rowId: number, col: number) => setFocus({ rowId, col }), []);
-
   const onCellBlur = useCallback(
     (rowId: number, col: number, value: string) => {
-      setFocus((f) => (f && f.rowId === rowId && f.col === col ? null : f));
       const cleaned = ui.cleanOnBlur?.(col, value);
       if (cleaned !== undefined && cleaned !== value) setCells([rowId], col, cleaned);
     },
@@ -453,11 +449,9 @@ export function TableEditor<Ctx>({ file, store, ui, confirmOverwrite, onSaved, f
                   original={entry.original.get(r.id)}
                   selected={selection.ids.has(r.id)}
                   readOnly={readOnly}
-                  focusCol={focus?.rowId === r.id ? focus.col : null}
                   onCell={onCell}
                   onRowHead={onRowHead}
                   onCellKey={onCellKey}
-                  onCellFocus={onCellFocus}
                   onCellBlur={onCellBlur}
                   onRequestAdd={onRequestAdd}
                 />
@@ -483,12 +477,9 @@ interface GridRowProps<Ctx> {
   original: readonly string[] | undefined;
   selected: boolean;
   readOnly: boolean;
-  /** Column being edited in this row, if any. */
-  focusCol: number | null;
   onCell: (id: number, col: number, value: string) => void;
   onRowHead: (id: number, e: MouseEvent) => void;
   onCellKey: (e: KeyboardEvent<HTMLElement>, rowIndex: number, col: number) => void;
-  onCellFocus: (id: number, col: number) => void;
   onCellBlur: (id: number, col: number, value: string) => void;
   onRequestAdd: (id: number, col: number) => void;
 }
@@ -497,8 +488,8 @@ const sameErrors = (a: RowErrors | undefined, b: RowErrors | undefined) =>
   a === b || JSON.stringify(a ?? {}) === JSON.stringify(b ?? {});
 
 function GridRowImpl<Ctx>(props: GridRowProps<Ctx>) {
-  const { ui, ctx, listPrefix, row, index, errors, original, selected, readOnly, focusCol } = props;
-  const { onCell, onRowHead, onCellKey, onCellFocus, onCellBlur, onRequestAdd } = props;
+  const { ui, ctx, listPrefix, row, index, errors, original, selected, readOnly } = props;
+  const { onCell, onRowHead, onCellKey, onCellBlur, onRequestAdd } = props;
   const fields = ui.schema.format.fields;
   const extras = ui.extraColumns ?? [];
   const number = index + 1;
@@ -529,11 +520,10 @@ function GridRowImpl<Ctx>(props: GridRowProps<Ctx>) {
           const error = errors?.[f];
           const was = original && original[col] !== row.values[col] ? original[col] : undefined;
           const type = ui.cell(col, row.values);
-          const random = type.kind === "text" && type.random && row.values[col] === "random";
           return [
             <td
               key={f}
-              className={`cell-td cell-${f}${error ? " invalid" : ""}${was !== undefined ? " changed" : ""}${random ? " random" : ""}`}
+              className={`cell-td cell-${f}${error ? " invalid" : ""}${was !== undefined ? " changed" : ""}`}
             >
               <Cell
                 type={type}
@@ -544,13 +534,11 @@ function GridRowImpl<Ctx>(props: GridRowProps<Ctx>) {
                 error={error}
                 was={was}
                 label={`Row ${number} ${f}`}
-                focused={focusCol === col}
                 disabled={readOnly}
                 dataRow={index}
                 dataCol={col}
                 onChange={(v) => onCell(row.id, col, v)}
                 onKeyDown={(e) => onCellKey(e, index, col)}
-                onFocus={() => onCellFocus(row.id, col)}
                 onBlur={() => onCellBlur(row.id, col, row.values[col])}
                 onRequestAdd={() => onRequestAdd(row.id, col)}
                 listId={`${listPrefix}-${col}`}
@@ -580,7 +568,6 @@ const GridRow = memo(
     a.original === b.original &&
     a.selected === b.selected &&
     a.readOnly === b.readOnly &&
-    a.focusCol === b.focusCol &&
     a.onCell === b.onCell &&
     a.onRowHead === b.onRowHead &&
     a.onCellKey === b.onCellKey &&
@@ -660,9 +647,7 @@ function BulkEditPanel<Ctx>({
   const [col, setCol] = useState(ui.bulkDefaultCol);
   const type: CellType<Ctx> = ui.cell(col, sampleValues);
   // Dependent dropdowns stay usable here even if the sample row disables them.
-  // The typed value is shown as-is, not as a display view.
-  const panelType: CellType<Ctx> =
-    type.kind === "select" ? { ...type, disabled: undefined } : type.kind === "text" ? { ...type, display: undefined } : type;
+  const panelType: CellType<Ctx> = type.kind === "select" ? { ...type, disabled: undefined } : type;
   return (
     <section className="action-panel" aria-label="Bulk edit">
       <strong>Bulk edit</strong>

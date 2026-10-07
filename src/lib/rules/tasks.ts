@@ -68,21 +68,3 @@ export function splitMode(mode: string): string[] | null {
   }
   return parts;
 }
-
-/** How inputs are split into keywords for the parsed view. */
-export const INPUT_PARSING = {
-  separator: " ",
-  negativePrefix: "-",
-};
-
-/** Positive and negative keywords of an input, or null if it's a single word. */
-export function parseInput(input: string): { positive: string[]; negative: string[] } | null {
-  const words = input.split(INPUT_PARSING.separator).filter(Boolean);
-  if (words.length < 2) return null;
-  const p = INPUT_PARSING.negativePrefix;
-  const isNegative = (w: string) => w.startsWith(p) && w.length > p.length;
-  return {
-    positive: words.filter((w) => !isNegative(w)),
-    negative: words.filter(isNegative).map((w) => w.slice(p.length)),
-  };
-}

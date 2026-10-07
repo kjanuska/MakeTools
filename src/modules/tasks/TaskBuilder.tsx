@@ -7,6 +7,7 @@ import { createPortal } from "react-dom";
 import { Cell } from "../../components/table/cells";
 import type { CellType, TableUI } from "../../components/table/types";
 import { TASK_COL as C, TASK_FIELDS } from "../../lib/formats/tasks";
+import { MODE_PARTS, splitMode } from "../../lib/rules/tasks";
 import { ACTIONS, useShortcutsRef } from "../../lib/shortcuts";
 import { BreakdownView } from "./BreakdownView";
 import "./tasks.css";
@@ -26,6 +27,13 @@ import {
   type SplitField,
 } from "./build";
 import type { TaskContext } from "./schema";
+
+/** Builder editors for fields that are plain text in the grid: mode as parts, numbers as spin buttons. */
+const BUILDER_CELLS: Partial<Record<SplitField, CellType<TaskContext>>> = {
+  mode: { kind: "parts", parts: MODE_PARTS, split: splitMode },
+  cartQuantity: { kind: "spin", min: 1, step: 1 },
+  delay: { kind: "spin", min: 0, step: 100 },
+};
 
 interface Props {
   initial: BuildPlan;
@@ -490,6 +498,8 @@ export function TaskBuilder({ initial, actionsSlot, ctx, ui, before, onApply, on
 
   /** The cell editor for a field's values; "Add site…" is left to the grid and Settings. */
   const typeOf = (f: SplitField): CellType<TaskContext> => {
+    const own = BUILDER_CELLS[f];
+    if (own) return own;
     const t = ui.cell(C[f]);
     return t.kind === "select" ? { ...t, add: undefined } : t;
   };

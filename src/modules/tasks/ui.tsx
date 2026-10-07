@@ -4,7 +4,7 @@ import type { DataRow } from "../../lib/formats/csvTable";
 import { TASK_COL as C, TASK_FIELDS, TASK_HEADER, cleanInput } from "../../lib/formats/tasks";
 import { isRecord } from "../../lib/table/ops";
 import type { DocEntry } from "../../lib/table/store";
-import { ALL_PROFILES, MODE_PARTS, parseInput, splitMode } from "../../lib/rules/tasks";
+import { ALL_PROFILES } from "../../lib/rules/tasks";
 import { taskCount, TASK_SCHEMA, type TaskContext } from "./schema";
 
 /** Contents of a new, empty task file: the header, LF, like the existing files. */
@@ -42,7 +42,10 @@ export function entryTotals(e: DocEntry, ctx: TaskContext) {
   return totals;
 }
 
-/** The tasks UI. `addSite` saves a site typed in "Add site…" to the global list. */
+/**
+ * The tasks UI. `addSite` saves a site typed in "Add site…" to the global list.
+ * Fields without a dropdown are plain text boxes showing the raw value.
+ */
 export function makeTaskUI(addSite: (site: string) => void): TableUI<TaskContext> {
   const cells: Record<number, CellType<TaskContext>> = {
     [C.profileGroup]: { kind: "select", options: (_, ctx) => sorted(ctx.profileGroups.keys()) },
@@ -53,22 +56,17 @@ export function makeTaskUI(addSite: (site: string) => void): TableUI<TaskContext
     },
     [C.proxyGroup]: { kind: "select", options: (_, ctx) => sorted(ctx.proxyGroups) },
     [C.accountGroup]: { kind: "select", options: (_, ctx) => sorted(ctx.accountGroups) },
-    [C.input]: { kind: "text", display: parsedInput },
-    [C.size]: { kind: "text", random: true },
-    [C.color]: { kind: "text", random: true },
     [C.site]: {
       kind: "select",
       options: (_, ctx) => ctx.sites,
       add: { label: "Add site…", prompt: "New site", onAdd: addSite },
     },
-    [C.mode]: { kind: "parts", parts: MODE_PARTS, split: splitMode },
-    [C.cartQuantity]: { kind: "spin", min: 1, step: 1 },
-    [C.delay]: { kind: "spin", min: 0, step: 100 },
   };
+  const text: CellType<TaskContext> = { kind: "text" };
 
   return {
     schema: TASK_SCHEMA,
-    cell: (col) => cells[col],
+    cell: (col) => cells[col] ?? text,
     optional: () => false,
     applyEdit(values, col, value, ctx) {
       if (values[col] === value) return values as string[];
@@ -126,24 +124,4 @@ export function makeTaskUI(addSite: (site: string) => void): TableUI<TaskContext
       },
     },
   };
-}
-
-/** Positive and negative keywords of an input with several words (none for one word). */
-function parsedInput(input: string) {
-  const parsed = parseInput(input);
-  if (!parsed) return null;
-  return (
-    <span className="parsed">
-      {parsed.positive.map((w, i) => (
-        <span key={`p${i}`} className="kw kw-pos">
-          {w}
-        </span>
-      ))}
-      {parsed.negative.map((w, i) => (
-        <span key={`n${i}`} className="kw kw-neg" title="Negative keyword">
-          −{w}
-        </span>
-      ))}
-    </span>
-  );
 }
